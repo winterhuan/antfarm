@@ -154,7 +154,7 @@ Full work prompt to include in the spawned task:
 ${workPrompt}
 ---END WORK PROMPT---
 
-Reply with a short summary of what you spawned.`;
+Reply with a short summary of what you spawned. Do NOT wait for the spawned session to finish — it runs independently.`;
 }
 
 export async function setupAgentCrons(workflow: WorkflowSpec): Promise<void> {
