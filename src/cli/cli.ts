@@ -31,6 +31,7 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import type { BackendType } from "../backend/interface.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -91,9 +92,11 @@ function printUsage() {
       "",
       "antfarm workflow list                List available workflows",
       "antfarm workflow install <name>      Install a workflow",
+      "antfarm workflow install <name> --backend <openclaw|hermes>  Install with specific backend",
       "antfarm workflow uninstall <name>    Uninstall a workflow (blocked if runs active)",
       "antfarm workflow uninstall --all     Uninstall all workflows (--force to override)",
       "antfarm workflow run <name> <task>   Start a workflow run",
+      "antfarm workflow run <name> <task> --backend <openclaw|hermes>  Run with specific backend",
       "antfarm workflow status <query>      Check run status (task substring, run ID prefix)",
       "antfarm workflow runs                List all workflow runs",
       "antfarm workflow resume <run-id>     Resume a failed run from where it left off",
@@ -484,7 +487,13 @@ async function main() {
   if (!target) { printUsage(); process.exit(1); }
 
   if (action === "install") {
-    const result = await installWorkflow({ workflowId: target });
+    const backendIdx = args.indexOf("--backend");
+    const backend = backendIdx !== -1 ? args[backendIdx + 1] as BackendType : undefined;
+    if (backend && backend !== 'openclaw' && backend !== 'hermes') {
+      process.stderr.write(`Invalid backend: ${backend}. Valid values: openclaw, hermes\n`);
+      process.exit(1);
+    }
+    const result = await installWorkflow({ workflowId: target, backend });
     process.stdout.write(`Installed workflow: ${result.workflowId}\nAgent crons will start when a run begins.\n`);
     process.stdout.write(`\nStart with: antfarm workflow run ${result.workflowId} "your task"\n`);
     return;
@@ -671,15 +680,26 @@ async function main() {
 
   if (action === "run") {
     let notifyUrl: string | undefined;
+    let backend: BackendType | undefined;
     const runArgs = args.slice(3);
     const nuIdx = runArgs.indexOf("--notify-url");
     if (nuIdx !== -1) {
       notifyUrl = runArgs[nuIdx + 1];
       runArgs.splice(nuIdx, 2);
     }
+    const backendIdx = runArgs.indexOf("--backend");
+    if (backendIdx !== -1) {
+      const backendValue = runArgs[backendIdx + 1];
+      if (backendValue !== 'openclaw' && backendValue !== 'hermes') {
+        process.stderr.write(`Invalid backend: ${backendValue}. Valid values: openclaw, hermes\n`);
+        process.exit(1);
+      }
+      backend = backendValue as BackendType;
+      runArgs.splice(backendIdx, 2);
+    }
     const taskTitle = runArgs.join(" ").trim();
     if (!taskTitle) { process.stderr.write("Missing task title.\n"); printUsage(); process.exit(1); }
-    const run = await runWorkflow({ workflowId: target, taskTitle, notifyUrl });
+    const run = await runWorkflow({ workflowId: target, taskTitle, notifyUrl, backend });
     process.stdout.write(
       [`Run: #${run.runNumber} (${run.id})`, `Workflow: ${run.workflowId}`, `Task: ${run.task}`, `Status: ${run.status}`].join("\n") + "\n",
     );
