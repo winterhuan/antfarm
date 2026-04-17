@@ -15,16 +15,26 @@ export async function installWorkflow(params: { workflowId: string; backend?: Ba
   const { workflowDir, bundledSourceDir } = await fetchWorkflow(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
 
-  // Resolve backend using the full hierarchy
-  const firstAgent = workflow.agents[0];
-  if (!firstAgent) {
+  if (workflow.agents.length === 0) {
     throw new Error(`Workflow ${workflow.id} has no agents defined`);
   }
-  const resolved = await resolveBackendConfig(firstAgent, workflow, params.backend);
-  const backend = createBackend(resolved.type);
 
-  // Delegate to backend-specific installation
-  await backend.install(workflow, bundledSourceDir);
+  // Resolve backend per-agent and group by type
+  const agentsByBackend = new Map<BackendType, typeof workflow.agents>();
+  for (const agent of workflow.agents) {
+    const resolved = await resolveBackendConfig(agent, workflow, params.backend);
+    const list = agentsByBackend.get(resolved.type) ?? [];
+    list.push(agent);
+    agentsByBackend.set(resolved.type, list);
+  }
+
+  // Install each backend group separately
+  for (const [backendType, agents] of agentsByBackend) {
+    const backend = createBackend(backendType);
+    // Create a sub-workflow with only this backend's agents
+    const subWorkflow = { ...workflow, agents };
+    await backend.install(subWorkflow, bundledSourceDir);
+  }
 
   // Write workflow metadata (backend-agnostic)
   await writeWorkflowMetadata({ workflowDir, workflowId: workflow.id, source: `bundled:${params.workflowId}` });

@@ -32,6 +32,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { BackendType } from "../backend/interface.js";
+import { validateBackendType } from "../backend/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -489,9 +490,13 @@ async function main() {
   if (action === "install") {
     const backendIdx = args.indexOf("--backend");
     const backend = backendIdx !== -1 ? args[backendIdx + 1] as BackendType : undefined;
-    if (backend && backend !== 'openclaw' && backend !== 'hermes') {
-      process.stderr.write(`Invalid backend: ${backend}. Valid values: openclaw, hermes\n`);
-      process.exit(1);
+    if (backend) {
+      try {
+        validateBackendType(backend);
+      } catch (err) {
+        process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
+        process.exit(1);
+      }
     }
     const result = await installWorkflow({ workflowId: target, backend });
     process.stdout.write(`Installed workflow: ${result.workflowId}\nAgent crons will start when a run begins.\n`);
@@ -690,11 +695,13 @@ async function main() {
     const backendIdx = runArgs.indexOf("--backend");
     if (backendIdx !== -1) {
       const backendValue = runArgs[backendIdx + 1];
-      if (backendValue !== 'openclaw' && backendValue !== 'hermes') {
-        process.stderr.write(`Invalid backend: ${backendValue}. Valid values: openclaw, hermes\n`);
+      try {
+        validateBackendType(backendValue);
+        backend = backendValue as BackendType;
+      } catch (err) {
+        process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
         process.exit(1);
       }
-      backend = backendValue as BackendType;
       runArgs.splice(backendIdx, 2);
     }
     const taskTitle = runArgs.join(" ").trim();

@@ -1,6 +1,6 @@
 import type { BackendType } from './interface.js';
 import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
-import { readAntfarmConfig } from '../lib/config.js';
+import { readAntfarmConfig, DEFAULT_BACKEND } from '../lib/config.js';
 
 export interface BackendConfig {
   type: BackendType;
@@ -10,8 +10,6 @@ export interface ResolvedBackendConfig {
   type: BackendType;
   source: 'cli' | 'agent' | 'workflow' | 'global' | 'default';
 }
-
-const DEFAULT_BACKEND: BackendType = 'openclaw';
 
 export async function resolveBackendConfig(
   agent: WorkflowAgent,

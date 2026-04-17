@@ -17,6 +17,10 @@ import { removeAgentCrons } from "./agent-cron.js";
 import { deleteAgentCronJobs } from "./gateway-api.js";
 import { getDb } from "../db.js";
 import { stopDaemon } from "../server/daemonctl.js";
+import { loadWorkflowSpec } from "./workflow-spec.js";
+import { createBackend } from "../backend/index.js";
+import type { BackendType } from "../backend/interface.js";
+import { DEFAULT_BACKEND } from "../lib/config.js";
 import type { WorkflowInstallResult } from "./types.js";
 
 function filterAgentList(
@@ -140,6 +144,32 @@ export async function uninstallWorkflow(params: {
 }): Promise<WorkflowInstallResult> {
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflowWorkspaceDir = resolveWorkflowWorkspaceDir(params.workflowId);
+
+  // Call backend uninstall for each backend type used by workflow agents
+  try {
+    const workflow = await loadWorkflowSpec(workflowDir);
+    // Group agents by backend type
+    const backendsByType = new Map<BackendType, Set<string>>();
+    for (const agent of workflow.agents) {
+      const agentBackend = (agent.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
+      const agents = backendsByType.get(agentBackend) ?? new Set<string>();
+      agents.add(agent.id);
+      backendsByType.set(agentBackend, agents);
+    }
+    // Uninstall each backend
+    for (const [backendType] of backendsByType) {
+      try {
+        const backend = createBackend(backendType);
+        await backend.uninstall(params.workflowId);
+      } catch (err) {
+        console.error(`Warning: Failed to uninstall ${backendType} backend for workflow ${params.workflowId}:`, err);
+      }
+    }
+  } catch (err) {
+    // Log but don't fail - workflow spec might not exist
+    console.error(`Warning: Failed to load workflow spec for uninstall:`, err);
+  }
+
   const { path: configPath, config } = await readOpenClawConfig();
   const list = Array.isArray(config.agents?.list) ? config.agents?.list : [];
   const nextList = filterAgentList(list, params.workflowId);

@@ -249,8 +249,10 @@ export class OpenClawBackend implements Backend {
   }
 
   async uninstall(workflowId: string): Promise<void> {
+    // Clean up OpenClaw-specific resources (cron jobs created by this backend).
+    // Note: Agent workspaces and OpenClaw agent entries are managed by installer/uninstall.ts
+    // because they require coordination with OpenClaw config file operations.
     await deleteAgentCronJobs(`antfarm/${workflowId}/`);
-    // Workspaces are cleaned up separately
   }
 
   async startRun(workflow: WorkflowSpec): Promise<void> {

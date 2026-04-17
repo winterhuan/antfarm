@@ -16,13 +16,21 @@ export async function runWorkflow(params: {
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
 
-  // Resolve backend using the full hierarchy
-  const firstAgent = workflow.agents[0];
-  if (!firstAgent) {
+  if (workflow.agents.length === 0) {
     throw new Error(`Workflow ${workflow.id} has no agents defined`);
   }
-  const resolved = await resolveBackendConfig(firstAgent, workflow, params.backend);
-  const backend = createBackend(resolved.type);
+
+  // Resolve backend per-agent and group by type
+  const agentsByBackend = new Map<BackendType, typeof workflow.agents>();
+  for (const agent of workflow.agents) {
+    const resolved = await resolveBackendConfig(agent, workflow, params.backend);
+    const list = agentsByBackend.get(resolved.type) ?? [];
+    list.push(agent);
+    agentsByBackend.set(resolved.type, list);
+  }
+
+  // Use the primary backend (first one) for run metadata
+  const primaryBackendType = agentsByBackend.keys().next().value as BackendType;
 
   const db = getDb();
   const now = new Date().toISOString();
@@ -38,9 +46,9 @@ export async function runWorkflow(params: {
   try {
     const notifyUrl = params.notifyUrl ?? workflow.notifications?.url ?? null;
     const insertRun = db.prepare(
-      "INSERT INTO runs (id, run_number, workflow_id, task, status, context, notify_url, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?)"
+      "INSERT INTO runs (id, run_number, workflow_id, task, status, context, notify_url, backend, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)"
     );
-    insertRun.run(runId, runNumber, workflow.id, params.taskTitle, JSON.stringify(initialContext), notifyUrl, now, now);
+    insertRun.run(runId, runNumber, workflow.id, params.taskTitle, JSON.stringify(initialContext), notifyUrl, primaryBackendType, now, now);
 
     const insertStep = db.prepare(
       "INSERT INTO steps (id, run_id, step_id, agent_id, step_index, input_template, expects, status, max_retries, type, loop_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -63,13 +71,28 @@ export async function runWorkflow(params: {
     throw err;
   }
 
-  // Start the run via backend
+  // Start the run via each backend
   try {
-    await backend.startRun(workflow);
+    for (const [backendType, agents] of agentsByBackend) {
+      const backend = createBackend(backendType);
+      const subWorkflow = { ...workflow, agents };
+      await backend.startRun(subWorkflow);
+    }
   } catch (err) {
     // Roll back the run since it can't advance without the backend
     const db2 = getDb();
-    db2.prepare("UPDATE runs SET status = 'failed', updated_at = ? WHERE id = ?").run(new Date().toISOString(), runId);
+    const failedAt = new Date().toISOString();
+    db2.prepare("UPDATE runs SET status = 'failed', updated_at = ? WHERE id = ?").run(failedAt, runId);
+
+    // Emit failure event for dashboard visibility
+    emitEvent({
+      ts: failedAt,
+      event: "run.failed",
+      runId,
+      workflowId: workflow.id,
+      detail: err instanceof Error ? err.message : String(err),
+    });
+
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Cannot start workflow run: backend start failed. ${message}`);
   }

@@ -4,6 +4,7 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { createBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
+import { DEFAULT_BACKEND } from "../lib/config.js";
 
 export type RunInfo = {
   id: string;
@@ -12,6 +13,7 @@ export type RunInfo = {
   task: string;
   status: string;
   context: string;
+  backend: string;
   created_at: string;
   updated_at: string;
 };
@@ -123,13 +125,33 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
   ).run(run.id);
   const cancelledSteps = Number(result.changes);
 
-  // Stop the backend for this workflow
+  // Stop the backends for this workflow (support mixed backends)
   try {
     const workflowDir = resolveWorkflowDir(run.workflow_id);
     const workflow = await loadWorkflowSpec(workflowDir);
-    const backendType = (workflow.defaultBackend ?? 'openclaw') as BackendType;
-    const backend = createBackend(backendType);
-    await backend.stopRun(workflow);
+
+    // Group agents by backend type
+    const backendsByType = new Map<BackendType, Set<string>>();
+    for (const agent of workflow.agents) {
+      const agentBackend = (agent.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
+      const agents = backendsByType.get(agentBackend) ?? new Set<string>();
+      agents.add(agent.id);
+      backendsByType.set(agentBackend, agents);
+    }
+
+    // Stop each backend
+    for (const [backendType] of backendsByType) {
+      try {
+        const backend = createBackend(backendType);
+        const subWorkflow = { ...workflow, agents: workflow.agents.filter(a => {
+          const ab = (a.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
+          return ab === backendType;
+        }) };
+        await backend.stopRun(subWorkflow);
+      } catch (err) {
+        console.error(`Warning: Failed to stop ${backendType} backend for workflow ${run.workflow_id}:`, err);
+      }
+    }
   } catch (err) {
     // Log error but don't fail - the run is already marked as cancelled
     console.error(`Warning: Failed to stop backend for workflow ${run.workflow_id}:`, err);
