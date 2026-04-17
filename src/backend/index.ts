@@ -14,3 +14,5 @@ export function createBackend(type: BackendType): Backend {
 }
 
 export type { Backend, BackendType } from './interface.js';
+export { resolveBackendConfig, validateBackendType } from './config-resolver.js';
+export type { BackendConfig, ResolvedBackendConfig } from './config-resolver.js';
