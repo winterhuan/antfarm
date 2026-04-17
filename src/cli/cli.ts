@@ -34,6 +34,54 @@ import { dirname, join } from "node:path";
 import type { BackendType } from "../backend/interface.js";
 import { validateBackendType } from "../backend/index.js";
 
+/**
+ * Parse --backend flag from CLI arguments.
+ * Validates the backend type and returns the value if present.
+ * Throws on invalid backend type.
+ */
+function parseBackendFlag(args: string[]): BackendType | undefined {
+  const backendIdx = args.indexOf("--backend");
+  if (backendIdx === -1) return undefined;
+
+  const backendValue = args[backendIdx + 1];
+  if (!backendValue) {
+    process.stderr.write("Missing value for --backend flag\n");
+    process.exit(1);
+  }
+
+  try {
+    validateBackendType(backendValue);
+    return backendValue as BackendType;
+  } catch (err) {
+    process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
+    process.exit(1);
+  }
+}
+
+/**
+ * Parse --backend flag and remove it from args array (for run command that needs remaining args).
+ * Returns the backend value and modifies the input array.
+ */
+function parseBackendFlagAndRemove(args: string[]): BackendType | undefined {
+  const backendIdx = args.indexOf("--backend");
+  if (backendIdx === -1) return undefined;
+
+  const backendValue = args[backendIdx + 1];
+  if (!backendValue) {
+    process.stderr.write("Missing value for --backend flag\n");
+    process.exit(1);
+  }
+
+  try {
+    validateBackendType(backendValue);
+    args.splice(backendIdx, 2); // Remove --backend and its value
+    return backendValue as BackendType;
+  } catch (err) {
+    process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
+    process.exit(1);
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkgPath = join(__dirname, "..", "..", "package.json");
@@ -488,16 +536,7 @@ async function main() {
   if (!target) { printUsage(); process.exit(1); }
 
   if (action === "install") {
-    const backendIdx = args.indexOf("--backend");
-    const backend = backendIdx !== -1 ? args[backendIdx + 1] as BackendType : undefined;
-    if (backend) {
-      try {
-        validateBackendType(backend);
-      } catch (err) {
-        process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
-        process.exit(1);
-      }
-    }
+    const backend = parseBackendFlag(args);
     const result = await installWorkflow({ workflowId: target, backend });
     process.stdout.write(`Installed workflow: ${result.workflowId}\nAgent crons will start when a run begins.\n`);
     process.stdout.write(`\nStart with: antfarm workflow run ${result.workflowId} "your task"\n`);
@@ -685,25 +724,13 @@ async function main() {
 
   if (action === "run") {
     let notifyUrl: string | undefined;
-    let backend: BackendType | undefined;
     const runArgs = args.slice(3);
     const nuIdx = runArgs.indexOf("--notify-url");
     if (nuIdx !== -1) {
       notifyUrl = runArgs[nuIdx + 1];
       runArgs.splice(nuIdx, 2);
     }
-    const backendIdx = runArgs.indexOf("--backend");
-    if (backendIdx !== -1) {
-      const backendValue = runArgs[backendIdx + 1];
-      try {
-        validateBackendType(backendValue);
-        backend = backendValue as BackendType;
-      } catch (err) {
-        process.stderr.write(err instanceof Error ? err.message + "\n" : String(err) + "\n");
-        process.exit(1);
-      }
-      runArgs.splice(backendIdx, 2);
-    }
+    const backend = parseBackendFlagAndRemove(runArgs);
     const taskTitle = runArgs.join(" ").trim();
     if (!taskTitle) { process.stderr.write("Missing task title.\n"); printUsage(); process.exit(1); }
     const run = await runWorkflow({ workflowId: target, taskTitle, notifyUrl, backend });
