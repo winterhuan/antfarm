@@ -103,39 +103,28 @@ export class HermesBackend implements Backend {
     await fs.writeFile(path.join(workspaceDir, '.antfarm'), workflowId, 'utf-8');
   }
 
-  private async listAllProfiles(): Promise<string[]> {
+  private async scanProfiles(filter: (name: string) => boolean): Promise<string[]> {
     const profilesDir = path.join(os.homedir(), '.hermes', 'profiles');
     try {
       const entries = await fs.readdir(profilesDir, { withFileTypes: true });
       return entries
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name);
+        .filter((entry) => entry.isDirectory() && filter(entry.name))
+        .map((entry) => entry.name);
     } catch {
       // Directory doesn't exist or can't be read
       return [];
     }
   }
 
-  private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
-    const profilesDir = path.join(os.homedir(), '.hermes', 'profiles');
-    const prefix = `${workflowId}-`;
+  private async listAllProfiles(): Promise<string[]> {
+    return this.scanProfiles(() => true);
+  }
 
-    try {
-      const entries = await fs.readdir(profilesDir, { withFileTypes: true });
-      return entries
-        .filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))
-        .map(entry => {
-          // Exact prefix match: profile must be "{workflowId}-{agentId}"
-          // This prevents "foo" matching "foo-bar" - only "foo-{agentId}" matches
-          const name = entry.name;
-          const suffix = name.slice(prefix.length);
-          // Suffix must be non-empty (the agent ID)
-          return suffix.length > 0 ? name : null;
-        })
-        .filter((name): name is string => name !== null);
-    } catch {
-      return [];
-    }
+  private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
+    const prefix = `${workflowId}-`;
+    // Exact prefix match: profile must be "{workflowId}-{agentId}" with a non-empty agent ID.
+    // Prevents "foo" matching "foo-bar-*" profiles belonging to other workflows.
+    return this.scanProfiles((name) => name.startsWith(prefix) && name.length > prefix.length);
   }
 
   private async verifyProfileOwnership(workflowId: string, profileName: string): Promise<boolean> {

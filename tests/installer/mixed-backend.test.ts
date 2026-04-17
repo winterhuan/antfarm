@@ -1,177 +1,265 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { installWorkflow } from '../../src/installer/install.js';
-import { runWorkflow } from '../../src/installer/run.js';
-import { HermesBackend, getProfileName } from '../../src/backend/hermes.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WorkflowSpec, WorkflowAgent } from '../../src/installer/types.js';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import { groupAgentsByBackend } from '../../src/backend/group-agents.js';
 
-// Mock dependencies
-vi.mock('../../src/installer/workflow-fetch.js', () => ({
-  fetchWorkflow: vi.fn(),
-}));
-
-vi.mock('../../src/installer/workflow-spec.js', () => ({
-  loadWorkflowSpec: vi.fn(),
-}));
-
-vi.mock('../../src/backend/hermes.js', () => {
-  const actual = vi.importActual('../../src/backend/hermes.js');
+// Default global config resolves to {} — individual tests can override
+vi.mock('../../src/lib/config.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/lib/config.js')>(
+    '../../src/lib/config.js',
+  );
   return {
     ...actual,
-    HermesBackend: vi.fn().mockImplementation(() => ({
-      install: vi.fn().mockResolvedValue(undefined),
-      uninstall: vi.fn().mockResolvedValue(undefined),
-      startRun: vi.fn().mockResolvedValue(undefined),
-      stopRun: vi.fn().mockResolvedValue(undefined),
-    })),
+    readAntfarmConfig: vi.fn().mockResolvedValue({}),
   };
 });
 
-vi.mock('../../src/backend/openclaw.js', () => ({
-  OpenClawBackend: vi.fn().mockImplementation(() => ({
-    install: vi.fn().mockResolvedValue(undefined),
-    uninstall: vi.fn().mockResolvedValue(undefined),
-    startRun: vi.fn().mockResolvedValue(undefined),
-    stopRun: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+function makeAgent(id: string, backend?: 'openclaw' | 'hermes'): WorkflowAgent {
+  return {
+    id,
+    name: id,
+    role: 'coding',
+    workspace: { baseDir: id, files: {} },
+    ...(backend ? { backend } : {}),
+  };
+}
 
-describe('Mixed Backend Workflow Integration', () => {
-  const createMixedWorkflow = (): WorkflowSpec => ({
-    id: 'mixed-backend-wf',
-    name: 'Mixed Backend Workflow',
-    agents: [
-      {
-        id: 'planner',
-        name: 'Planner',
-        role: 'analysis',
-        backend: 'openclaw', // OpenClaw backend
-        workspace: { baseDir: 'planner', files: { 'CLAUDE.md': './planner.md' } },
-      },
-      {
-        id: 'coder',
-        name: 'Coder',
-        role: 'coding',
-        backend: 'hermes', // Hermes backend
-        workspace: { baseDir: 'coder', files: { 'CLAUDE.md': './coder.md' } },
-      },
-      {
-        id: 'tester',
-        name: 'Tester',
-        role: 'testing',
-        backend: 'hermes', // Hermes backend
-        workspace: { baseDir: 'tester', files: { 'CLAUDE.md': './tester.md' } },
-      },
-    ],
-    steps: [
-      { id: 'step1', agent: 'planner', input: 'plan', expects: 'plan' },
-      { id: 'step2', agent: 'coder', input: 'code', expects: 'code' },
-      { id: 'step3', agent: 'tester', input: 'test', expects: 'test' },
-    ],
-    version: '1.0',
-  });
+function makeWorkflow(agents: WorkflowAgent[], defaultBackend?: 'openclaw' | 'hermes'): WorkflowSpec {
+  return {
+    id: 'mixed-wf',
+    name: 'Mixed Workflow',
+    agents,
+    steps: agents.map((a) => ({ id: `step-${a.id}`, agent: a.id, input: 'x', expects: 'y' })),
+    version: 1,
+    ...(defaultBackend ? { defaultBackend } : {}),
+  };
+}
 
+describe('groupAgentsByBackend', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
+  it('groups agents by their explicit backend field', async () => {
+    const workflow = makeWorkflow([
+      makeAgent('planner', 'openclaw'),
+      makeAgent('coder', 'hermes'),
+      makeAgent('tester', 'hermes'),
+    ]);
+
+    const groups = await groupAgentsByBackend(workflow);
+
+    expect(groups.size).toBe(2);
+    expect(groups.get('openclaw')?.map((a) => a.id)).toEqual(['planner']);
+    expect(groups.get('hermes')?.map((a) => a.id)).toEqual(['coder', 'tester']);
   });
 
-  describe('installWorkflow with mixed backends', () => {
-    it('should install agents to their respective backends', async () => {
-      const { fetchWorkflow } = await import('../../src/installer/workflow-fetch.js');
-      const { loadWorkflowSpec } = await import('../../src/installer/workflow-spec.js');
-      const workflow = createMixedWorkflow();
+  it('falls back to workflow defaultBackend when agent has none', async () => {
+    const workflow = makeWorkflow(
+      [
+        makeAgent('planner'), // no backend → workflow default
+        makeAgent('coder', 'hermes'),
+      ],
+      'openclaw',
+    );
 
-      vi.mocked(fetchWorkflow).mockResolvedValue({
-        workflowDir: '/tmp/test-wf',
-        bundledSourceDir: '/tmp/test-src',
-      });
-      vi.mocked(loadWorkflowSpec).mockResolvedValue(workflow);
+    const groups = await groupAgentsByBackend(workflow);
 
-      await installWorkflow({ workflowId: 'mixed-backend-wf' });
-
-      // Should have called install for both backends
-      // Note: In real implementation, this would call OpenClawBackend.install and HermesBackend.install
-    });
-
-    it('should group agents correctly when CLI backend overrides one agent', async () => {
-      const { fetchWorkflow } = await import('../../src/installer/workflow-fetch.js');
-      const { loadWorkflowSpec } = await import('../../src/installer/workflow-spec.js');
-      const workflow = createMixedWorkflow();
-
-      vi.mocked(fetchWorkflow).mockResolvedValue({
-        workflowDir: '/tmp/test-wf',
-        bundledSourceDir: '/tmp/test-src',
-      });
-      vi.mocked(loadWorkflowSpec).mockResolvedValue(workflow);
-
-      // CLI forces all to hermes
-      await installWorkflow({ workflowId: 'mixed-backend-wf', backend: 'hermes' });
-
-      // All 3 agents should go to Hermes when CLI overrides
-    });
+    expect(groups.get('openclaw')?.map((a) => a.id)).toEqual(['planner']);
+    expect(groups.get('hermes')?.map((a) => a.id)).toEqual(['coder']);
   });
 
-  describe('runWorkflow with mixed backends', () => {
-    it('should start runs on all backends used by agents', async () => {
-      // This would test that runWorkflow calls startRun on both OpenClaw and Hermes
-    });
+  it('respects global config default when workflow and agent are unset', async () => {
+    const { readAntfarmConfig } = await import('../../src/lib/config.js');
+    vi.mocked(readAntfarmConfig).mockResolvedValue({ defaultBackend: 'hermes' });
 
-    it('should rollback all backends if one fails to start', async () => {
-      // This would test the rollback behavior when one backend fails
-    });
+    const workflow = makeWorkflow([makeAgent('planner')]);
+    const groups = await groupAgentsByBackend(workflow);
+
+    expect(groups.get('hermes')?.map((a) => a.id)).toEqual(['planner']);
+    expect(groups.has('openclaw')).toBe(false);
   });
 
-  describe('backend isolation', () => {
-    it('should not leak agent configs between backends', async () => {
-      const workflow = createMixedWorkflow();
+  it('CLI override wins over every other source', async () => {
+    const workflow = makeWorkflow(
+      [
+        makeAgent('planner', 'openclaw'),
+        makeAgent('coder', 'hermes'),
+      ],
+      'openclaw',
+    );
 
-      // OpenClaw agents should not be visible to Hermes and vice versa
-      const openclawAgents = workflow.agents.filter(a => a.backend === 'openclaw');
-      const hermesAgents = workflow.agents.filter(a => a.backend === 'hermes');
+    const groups = await groupAgentsByBackend(workflow, 'hermes');
 
-      expect(openclawAgents).toHaveLength(1);
-      expect(hermesAgents).toHaveLength(2);
-      expect(openclawAgents[0].id).toBe('planner');
-      expect(hermesAgents.map(a => a.id)).toContain('coder');
-      expect(hermesAgents.map(a => a.id)).toContain('tester');
-    });
+    expect(groups.size).toBe(1);
+    expect(groups.get('hermes')?.map((a) => a.id)).toEqual(['planner', 'coder']);
+  });
+
+  it('preserves original agent order within each backend group', async () => {
+    const workflow = makeWorkflow([
+      makeAgent('a', 'hermes'),
+      makeAgent('b', 'openclaw'),
+      makeAgent('c', 'hermes'),
+      makeAgent('d', 'openclaw'),
+      makeAgent('e', 'hermes'),
+    ]);
+
+    const groups = await groupAgentsByBackend(workflow);
+
+    expect(groups.get('hermes')?.map((a) => a.id)).toEqual(['a', 'c', 'e']);
+    expect(groups.get('openclaw')?.map((a) => a.id)).toEqual(['b', 'd']);
+  });
+
+  it('returns empty map for empty workflow', async () => {
+    const workflow = makeWorkflow([]);
+    const groups = await groupAgentsByBackend(workflow);
+    expect(groups.size).toBe(0);
   });
 });
 
-describe('Mixed Backend Agent Resolution', () => {
-  it('should correctly identify backend from agent config', () => {
-    const agents: WorkflowAgent[] = [
-      { id: 'a1', backend: 'openclaw', workspace: { baseDir: 'a1', files: {} } },
-      { id: 'a2', backend: 'hermes', workspace: { baseDir: 'a2', files: {} } },
-      { id: 'a3', backend: 'openclaw', workspace: { baseDir: 'a3', files: {} } },
-    ];
-
-    const byBackend = agents.reduce((acc, agent) => {
-      const backend = agent.backend || 'openclaw';
-      acc[backend] = (acc[backend] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    expect(byBackend['openclaw']).toBe(2);
-    expect(byBackend['hermes']).toBe(1);
+describe('runWorkflow mixed-backend integration', () => {
+  // Ensure vitest resets module state between mocks
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
   });
 
-  it('should handle agents without explicit backend (fallback to default)', () => {
-    const agents: WorkflowAgent[] = [
-      { id: 'a1', workspace: { baseDir: 'a1', files: {} } }, // No backend specified
-      { id: 'a2', backend: 'hermes', workspace: { baseDir: 'a2', files: {} } },
-    ];
+  async function loadRunWithMocks(opts: {
+    openclawStart?: () => Promise<void>;
+    hermesStart?: () => Promise<void>;
+    openclawStop?: () => Promise<void>;
+    hermesStop?: () => Promise<void>;
+  }) {
+    const openclawStart = opts.openclawStart ?? (async () => {});
+    const hermesStart = opts.hermesStart ?? (async () => {});
+    const openclawStop = opts.openclawStop ?? (async () => {});
+    const hermesStop = opts.hermesStop ?? (async () => {});
 
-    const a1Backend = agents[0].backend || 'openclaw';
-    const a2Backend = agents[1].backend || 'openclaw';
+    const openclawStartSpy = vi.fn(openclawStart);
+    const hermesStartSpy = vi.fn(hermesStart);
+    const openclawStopSpy = vi.fn(openclawStop);
+    const hermesStopSpy = vi.fn(hermesStop);
 
-    expect(a1Backend).toBe('openclaw');
-    expect(a2Backend).toBe('hermes');
+    vi.doMock('../../src/backend/openclaw.js', () => ({
+      OpenClawBackend: vi.fn().mockImplementation(() => ({
+        install: vi.fn().mockResolvedValue(undefined),
+        uninstall: vi.fn().mockResolvedValue(undefined),
+        startRun: openclawStartSpy,
+        stopRun: openclawStopSpy,
+      })),
+      getMaxRoleTimeoutSeconds: () => 1800,
+    }));
+
+    vi.doMock('../../src/backend/hermes.js', () => ({
+      HermesBackend: vi.fn().mockImplementation(() => ({
+        install: vi.fn().mockResolvedValue(undefined),
+        uninstall: vi.fn().mockResolvedValue(undefined),
+        startRun: hermesStartSpy,
+        stopRun: hermesStopSpy,
+      })),
+      getProfileName: (wfId: string, agId: string) => `${wfId}-${agId}`,
+    }));
+
+    vi.doMock('../../src/installer/workflow-spec.js', () => ({
+      loadWorkflowSpec: vi.fn().mockResolvedValue(
+        makeWorkflow([
+          makeAgent('planner', 'openclaw'),
+          makeAgent('coder', 'hermes'),
+          makeAgent('tester', 'hermes'),
+        ]),
+      ),
+    }));
+
+    vi.doMock('../../src/installer/paths.js', () => ({
+      resolveWorkflowDir: () => '/tmp/test-wf',
+    }));
+
+    // Use an in-memory sqlite stub
+    const stmts = {
+      insertRun: { run: vi.fn() },
+      insertStep: { run: vi.fn() },
+      updateRun: { run: vi.fn() },
+    };
+    const dbExec = vi.fn();
+    const dbPrepare = vi.fn((sql: string) => {
+      if (sql.startsWith('INSERT INTO runs')) return stmts.insertRun;
+      if (sql.startsWith('INSERT INTO steps')) return stmts.insertStep;
+      if (sql.startsWith('UPDATE runs')) return stmts.updateRun;
+      return { run: vi.fn() };
+    });
+    vi.doMock('../../src/db.js', () => ({
+      getDb: () => ({ exec: dbExec, prepare: dbPrepare }),
+      nextRunNumber: () => 1,
+    }));
+
+    vi.doMock('../../src/installer/events.js', () => ({
+      emitEvent: vi.fn(),
+    }));
+
+    vi.doMock('../../src/lib/logger.js', () => ({
+      logger: { info: vi.fn() },
+    }));
+
+    const { runWorkflow } = await import('../../src/installer/run.js');
+    return {
+      runWorkflow,
+      spies: { openclawStartSpy, hermesStartSpy, openclawStopSpy, hermesStopSpy },
+      stmts,
+    };
+  }
+
+  it('starts all backends used by agents', async () => {
+    const { runWorkflow, spies } = await loadRunWithMocks({});
+
+    await runWorkflow({ workflowId: 'mixed-wf', taskTitle: 'test' });
+
+    expect(spies.openclawStartSpy).toHaveBeenCalledTimes(1);
+    expect(spies.hermesStartSpy).toHaveBeenCalledTimes(1);
+
+    // OpenClaw should be called with only its agent
+    const openclawWf = spies.openclawStartSpy.mock.calls[0][0] as WorkflowSpec;
+    expect(openclawWf.agents.map((a) => a.id)).toEqual(['planner']);
+
+    // Hermes should be called with both of its agents
+    const hermesWf = spies.hermesStartSpy.mock.calls[0][0] as WorkflowSpec;
+    expect(hermesWf.agents.map((a) => a.id)).toEqual(['coder', 'tester']);
+  });
+
+  it('rolls back already-started backends when a later backend fails to start', async () => {
+    // agentsByBackend iterates in insertion order: 'openclaw' first (planner),
+    // then 'hermes' (coder, tester). Make hermes.startRun throw so that
+    // the already-succeeded openclaw must be rolled back via stopRun.
+    const { runWorkflow, spies } = await loadRunWithMocks({
+      hermesStart: async () => {
+        throw new Error('hermes gateway failed');
+      },
+    });
+
+    await expect(
+      runWorkflow({ workflowId: 'mixed-wf', taskTitle: 'test' }),
+    ).rejects.toThrow('backend start failed');
+
+    // OpenClaw was started…
+    expect(spies.openclawStartSpy).toHaveBeenCalledTimes(1);
+    // …so it must be stopped on rollback.
+    expect(spies.openclawStopSpy).toHaveBeenCalledTimes(1);
+    // Hermes never fully started, no stop needed.
+    expect(spies.hermesStopSpy).not.toHaveBeenCalled();
+  });
+
+  it('marks run as failed in the DB when startRun fails', async () => {
+    const { runWorkflow, stmts } = await loadRunWithMocks({
+      hermesStart: async () => {
+        throw new Error('boom');
+      },
+    });
+
+    await expect(
+      runWorkflow({ workflowId: 'mixed-wf', taskTitle: 'test' }),
+    ).rejects.toThrow();
+
+    expect(stmts.updateRun.run).toHaveBeenCalled();
+    const updateArgs = stmts.updateRun.run.mock.calls[0];
+    expect(updateArgs[0]).toBeTruthy(); // timestamp
+    expect(typeof updateArgs[1]).toBe('string'); // runId
   });
 });

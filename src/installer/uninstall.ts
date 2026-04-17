@@ -144,32 +144,38 @@ export async function uninstallWorkflow(params: {
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflowWorkspaceDir = resolveWorkflowWorkspaceDir(params.workflowId);
 
-  // Call backend uninstall for each backend type used by workflow agents
+  // Load workflow spec; if missing (partial state), skip backend-specific cleanup
+  // and continue with best-effort filesystem cleanup below.
+  let workflow: Awaited<ReturnType<typeof loadWorkflowSpec>> | undefined;
   try {
-    const workflow = await loadWorkflowSpec(workflowDir);
+    workflow = await loadWorkflowSpec(workflowDir);
+  } catch (err) {
+    console.error(`Warning: Failed to load workflow spec for uninstall:`, err);
+  }
+
+  if (workflow) {
     // Group agents by backend type using full resolver (respects CLI/agent/workflow/global/default)
     const agentsByBackend = await groupAgentsByBackend(workflow);
-    // Uninstall each backend
-    const errors: Array<{ type: string; error: unknown }> = [];
+    const errors: Array<{ type: BackendType; error: unknown }> = [];
     for (const [backendType] of agentsByBackend) {
       try {
         const backend = createBackend(backendType);
         await backend.uninstall(params.workflowId);
       } catch (err) {
         errors.push({ type: backendType, error: err });
-        console.error(`Error: Failed to uninstall ${backendType} backend for workflow ${params.workflowId}:`, err);
       }
     }
-    // If any backend uninstall failed, throw an error
     if (errors.length > 0) {
+      // Let the caller (CLI) surface a non-zero exit — the shared filesystem
+      // cleanup below will not run, but the workflow spec is still on disk
+      // so the user can retry once the underlying issue is fixed.
       throw new Error(
-        `Failed to uninstall ${errors.length} backend(s): ` +
-        errors.map(e => `${e.type}: ${e.error instanceof Error ? e.error.message : String(e.error)}`).join('; ')
+        `Failed to uninstall ${errors.length} backend(s) for workflow "${params.workflowId}": ` +
+        errors
+          .map((e) => `${e.type}: ${e.error instanceof Error ? e.error.message : String(e.error)}`)
+          .join("; "),
       );
     }
-  } catch (err) {
-    // Log but don't fail - workflow spec might not exist
-    console.error(`Warning: Failed to load workflow spec for uninstall:`, err);
   }
 
   const { path: configPath, config } = await readOpenClawConfig();
