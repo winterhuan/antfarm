@@ -4,7 +4,7 @@ import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
 import { logger } from "../lib/logger.js";
 import { emitEvent } from "./events.js";
-import { createBackend } from "../backend/index.js";
+import { createBackend, resolveBackendConfig } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
 
 export async function runWorkflow(params: {
@@ -16,9 +16,13 @@ export async function runWorkflow(params: {
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
 
-  // Resolve backend: CLI arg > workflow default > global default
-  const backendType = params.backend ?? workflow.defaultBackend ?? 'openclaw';
-  const backend = createBackend(backendType);
+  // Resolve backend using the full hierarchy
+  const firstAgent = workflow.agents[0];
+  if (!firstAgent) {
+    throw new Error(`Workflow ${workflow.id} has no agents defined`);
+  }
+  const resolved = await resolveBackendConfig(firstAgent, workflow, params.backend);
+  const backend = createBackend(resolved.type);
 
   const db = getDb();
   const now = new Date().toISOString();

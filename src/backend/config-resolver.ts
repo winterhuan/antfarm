@@ -1,5 +1,6 @@
 import type { BackendType } from './interface.js';
 import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
+import { getGlobalDefaultBackend } from '../lib/config.js';
 
 export interface BackendConfig {
   type: BackendType;
@@ -7,16 +8,16 @@ export interface BackendConfig {
 
 export interface ResolvedBackendConfig {
   type: BackendType;
-  source: 'cli' | 'agent' | 'workflow' | 'default';
+  source: 'cli' | 'agent' | 'workflow' | 'global' | 'default';
 }
 
 const DEFAULT_BACKEND: BackendType = 'openclaw';
 
-export function resolveBackendConfig(
+export async function resolveBackendConfig(
   agent: WorkflowAgent,
   workflow: WorkflowSpec,
   cliBackend?: BackendType
-): ResolvedBackendConfig {
+): Promise<ResolvedBackendConfig> {
   // Priority 1: CLI argument (highest)
   if (cliBackend) {
     return { type: cliBackend, source: 'cli' };
@@ -32,7 +33,13 @@ export function resolveBackendConfig(
     return { type: workflow.defaultBackend, source: 'workflow' };
   }
 
-  // Priority 4: Global default (lowest)
+  // Priority 4: Global config file
+  const globalBackend = await getGlobalDefaultBackend();
+  if (globalBackend !== DEFAULT_BACKEND) {
+    return { type: globalBackend, source: 'global' };
+  }
+
+  // Priority 5: Hardcoded default (lowest)
   return { type: DEFAULT_BACKEND, source: 'default' };
 }
 
