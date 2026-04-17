@@ -116,10 +116,34 @@ export class HermesBackend implements Backend {
         await fs.access(antfarmMarker);
         const markerContent = await fs.readFile(antfarmMarker, 'utf-8');
         return markerContent.trim() === workflowId;
-      } catch {
-        // Marker doesn't exist or can't be read - assume not owned
+      } catch (markerErr) {
+        // Marker doesn't exist - check if this is a partial install (profile exists but workspace not created)
+        // In this case, treat it as owned by us since naming convention matches
+        const profileExists = await this.profileDirExists(profileName);
+        if (profileExists) {
+          // Partial install - profile created but marker not written yet
+          // Create marker now to complete ownership claim
+          try {
+            const workspaceDir = path.join(profileDir, 'workspace');
+            await fs.mkdir(workspaceDir, { recursive: true });
+            await fs.writeFile(antfarmMarker, workflowId, 'utf-8');
+            return true;
+          } catch {
+            return false;
+          }
+        }
         return false;
       }
+    } catch {
+      return false;
+    }
+  }
+
+  private async profileDirExists(profileName: string): Promise<boolean> {
+    try {
+      const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
+      const stat = await fs.stat(profileDir);
+      return stat.isDirectory();
     } catch {
       return false;
     }

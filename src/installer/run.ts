@@ -4,7 +4,7 @@ import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
 import { logger } from "../lib/logger.js";
 import { emitEvent } from "./events.js";
-import { createBackend, resolveBackendConfig } from "../backend/index.js";
+import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
 
 export async function runWorkflow(params: {
@@ -20,17 +20,11 @@ export async function runWorkflow(params: {
     throw new Error(`Workflow ${workflow.id} has no agents defined`);
   }
 
-  // Resolve backend per-agent and group by type
-  const agentsByBackend = new Map<BackendType, typeof workflow.agents>();
-  for (const agent of workflow.agents) {
-    const resolved = await resolveBackendConfig(agent, workflow, params.backend);
-    const list = agentsByBackend.get(resolved.type) ?? [];
-    list.push(agent);
-    agentsByBackend.set(resolved.type, list);
-  }
+  // Resolve backend per-agent and group by type (CLI > agent > workflow > global > default)
+  const agentsByBackend = await groupAgentsByBackend(workflow, params.backend);
 
-  // Use the primary backend (first one) for run metadata
-  const primaryBackendType = agentsByBackend.keys().next().value as BackendType;
+  // For backward compatibility, store the "primary" backend (most agents)
+  const primaryBackendType = getPrimaryBackend(agentsByBackend);
 
   const db = getDb();
   const now = new Date().toISOString();
@@ -72,13 +66,27 @@ export async function runWorkflow(params: {
   }
 
   // Start the run via each backend
+  const startedBackends: Array<{ type: BackendType; agents: typeof workflow.agents }> = [];
   try {
     for (const [backendType, agents] of agentsByBackend) {
       const backend = createBackend(backendType);
       const subWorkflow = { ...workflow, agents };
       await backend.startRun(subWorkflow);
+      startedBackends.push({ type: backendType, agents });
     }
   } catch (err) {
+    // Best-effort cleanup: stop already started backends
+    for (const { type, agents } of startedBackends) {
+      try {
+        const backend = createBackend(type);
+        const subWorkflow = { ...workflow, agents };
+        await backend.stopRun(subWorkflow);
+      } catch (stopErr) {
+        // Log but don't fail - we're already in error handling
+        console.error(`Warning: Failed to stop backend ${type} during rollback:`, stopErr);
+      }
+    }
+
     // Roll back the run since it can't advance without the backend
     const db2 = getDb();
     const failedAt = new Date().toISOString();
@@ -106,4 +114,22 @@ export async function runWorkflow(params: {
   });
 
   return { id: runId, runNumber, workflowId: workflow.id, task: params.taskTitle, status: "running" };
+}
+
+/**
+ * Determine the "primary" backend for a run (the one with most agents).
+ * Used for backward-compatible metadata storage.
+ */
+function getPrimaryBackend(agentsByBackend: Map<BackendType, unknown[]>): BackendType {
+  let maxCount = 0;
+  let primary: BackendType = 'openclaw';
+
+  for (const [type, agents] of agentsByBackend) {
+    if (agents.length > maxCount) {
+      maxCount = agents.length;
+      primary = type;
+    }
+  }
+
+  return primary;
 }

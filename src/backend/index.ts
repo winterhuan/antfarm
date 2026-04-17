@@ -13,6 +13,7 @@ export function createBackend(type: BackendType): Backend {
   }
 }
 
+export { groupAgentsByBackend } from './group-agents.js';
 export type { Backend, BackendType } from './interface.js';
 export { resolveBackendConfig, validateBackendType } from './config-resolver.js';
 export type { BackendConfig, ResolvedBackendConfig } from './config-resolver.js';

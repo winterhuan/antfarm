@@ -18,9 +18,8 @@ import { deleteAgentCronJobs } from "./gateway-api.js";
 import { getDb } from "../db.js";
 import { stopDaemon } from "../server/daemonctl.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
-import { createBackend } from "../backend/index.js";
+import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
-import { DEFAULT_BACKEND } from "../lib/config.js";
 import type { WorkflowInstallResult } from "./types.js";
 
 function filterAgentList(
@@ -148,16 +147,10 @@ export async function uninstallWorkflow(params: {
   // Call backend uninstall for each backend type used by workflow agents
   try {
     const workflow = await loadWorkflowSpec(workflowDir);
-    // Group agents by backend type
-    const backendsByType = new Map<BackendType, Set<string>>();
-    for (const agent of workflow.agents) {
-      const agentBackend = (agent.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
-      const agents = backendsByType.get(agentBackend) ?? new Set<string>();
-      agents.add(agent.id);
-      backendsByType.set(agentBackend, agents);
-    }
+    // Group agents by backend type using full resolver (respects CLI/agent/workflow/global/default)
+    const agentsByBackend = await groupAgentsByBackend(workflow);
     // Uninstall each backend
-    for (const [backendType] of backendsByType) {
+    for (const [backendType] of agentsByBackend) {
       try {
         const backend = createBackend(backendType);
         await backend.uninstall(params.workflowId);

@@ -2,9 +2,8 @@ import { getDb } from "../db.js";
 import { emitEvent } from "./events.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
-import { createBackend } from "../backend/index.js";
+import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
-import { DEFAULT_BACKEND } from "../lib/config.js";
 
 export type RunInfo = {
   id: string;
@@ -130,23 +129,14 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
     const workflowDir = resolveWorkflowDir(run.workflow_id);
     const workflow = await loadWorkflowSpec(workflowDir);
 
-    // Group agents by backend type
-    const backendsByType = new Map<BackendType, Set<string>>();
-    for (const agent of workflow.agents) {
-      const agentBackend = (agent.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
-      const agents = backendsByType.get(agentBackend) ?? new Set<string>();
-      agents.add(agent.id);
-      backendsByType.set(agentBackend, agents);
-    }
+    // Group agents by backend type using full resolver (respects CLI/agent/workflow/global/default)
+    const agentsByBackend = await groupAgentsByBackend(workflow);
 
     // Stop each backend
-    for (const [backendType] of backendsByType) {
+    for (const [backendType, agents] of agentsByBackend) {
       try {
         const backend = createBackend(backendType);
-        const subWorkflow = { ...workflow, agents: workflow.agents.filter(a => {
-          const ab = (a.backend ?? workflow.defaultBackend ?? DEFAULT_BACKEND) as BackendType;
-          return ab === backendType;
-        }) };
+        const subWorkflow = { ...workflow, agents };
         await backend.stopRun(subWorkflow);
       } catch (err) {
         console.error(`Warning: Failed to stop ${backendType} backend for workflow ${run.workflow_id}:`, err);

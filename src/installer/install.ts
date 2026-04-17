@@ -3,7 +3,7 @@ import path from "node:path";
 import { fetchWorkflow } from "./workflow-fetch.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import type { WorkflowInstallResult } from "./types.js";
-import { createBackend, resolveBackendConfig } from "../backend/index.js";
+import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
 
 async function writeWorkflowMetadata(params: { workflowDir: string; workflowId: string; source: string }) {
@@ -19,16 +19,11 @@ export async function installWorkflow(params: { workflowId: string; backend?: Ba
     throw new Error(`Workflow ${workflow.id} has no agents defined`);
   }
 
-  // Resolve backend per-agent and group by type
-  const agentsByBackend = new Map<BackendType, typeof workflow.agents>();
-  for (const agent of workflow.agents) {
-    const resolved = await resolveBackendConfig(agent, workflow, params.backend);
-    const list = agentsByBackend.get(resolved.type) ?? [];
-    list.push(agent);
-    agentsByBackend.set(resolved.type, list);
-  }
+  // Resolve backend per-agent and group by type (CLI > agent > workflow > global > default)
+  const agentsByBackend = await groupAgentsByBackend(workflow, params.backend);
 
   // Install each backend group separately
+  // NOTE: Keep this loop serial to avoid race conditions in createProfile
   for (const [backendType, agents] of agentsByBackend) {
     const backend = createBackend(backendType);
     // Create a sub-workflow with only this backend's agents
