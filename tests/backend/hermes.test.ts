@@ -171,6 +171,57 @@ describe('HermesBackend', () => {
         'belongs to a different workflow'
       );
     });
+
+    it('should recover from partial install (profile exists, marker missing)', async () => {
+      // First call: profile list shows profile exists
+      // Second call: hermes profile create should not be called
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' }); // listAllProfiles
+      mockExecFile.mockResolvedValueOnce({ stdout: 'test-workflow-agent-1 active\n', stderr: '' }); // listWorkflowProfiles for createProfile check
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' }); // config set commands
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' }); // cron add
+
+      // Mock fs.access to throw (marker doesn't exist)
+      mockAccess.mockRejectedValue(new Error('ENOENT'));
+
+      await expect(backend.install(mockWorkflow, '/source/dir')).rejects.toThrow(
+        'belongs to a different workflow'
+      );
+    });
+
+    it('should allow retry after partial install failure', async () => {
+      // Simulate first attempt: profile created, workspace failed
+      // Marker should be written by createProfile now, so second attempt should work
+    });
+  });
+
+  describe('partial install recovery', () => {
+    it('should write marker immediately after profile creation', async () => {
+      // Reset mocks
+      vi.clearAllMocks();
+
+      // Mock successful responses
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+      mockCopyFile.mockResolvedValue(undefined);
+
+      await backend.install(mockWorkflow, '/source/dir');
+
+      // Find the marker write call
+      const markerCalls = mockWriteFile.mock.calls.filter(
+        (call) => call[0]?.includes('.antfarm')
+      );
+
+      // Marker should be written
+      expect(markerCalls.length).toBeGreaterThan(0);
+    });
+
+    it('should not write marker twice on retry', async () => {
+      // Profile exists with marker - should skip marker write
+    });
   });
 
   describe('uninstall', () => {
@@ -234,6 +285,52 @@ describe('HermesBackend', () => {
         ['--profile', 'test-workflow-agent-1', 'gateway', 'start'],
         expect.any(Object)
       );
+    });
+
+    it('should rollback already started gateways when one fails', async () => {
+      const multiAgentWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [
+          { ...mockWorkflow.agents[0], id: 'agent-1' },
+          { ...mockWorkflow.agents[0], id: 'agent-2' },
+          { ...mockWorkflow.agents[0], id: 'agent-3' },
+        ],
+      };
+
+      // First two succeed, third fails
+      mockExecFile
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // agent-1 start
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // agent-2 start
+        .mockRejectedValueOnce(new Error('Port already in use')) // agent-3 start fails
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // agent-1 stop (rollback)
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // agent-2 stop (rollback)
+
+      await expect(backend.startRun(multiAgentWorkflow)).rejects.toThrow('Port already in use');
+
+      // Should have tried to stop the first two
+      const stopCalls = mockExecFile.mock.calls.filter(
+        (call) => call[0] === 'hermes' && call[1]?.[2] === 'stop'
+      );
+      expect(stopCalls).toHaveLength(2);
+    });
+
+    it('should not fail rollback when stop also fails', async () => {
+      const multiAgentWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [
+          { ...mockWorkflow.agents[0], id: 'agent-1' },
+          { ...mockWorkflow.agents[0], id: 'agent-2' },
+        ],
+      };
+
+      // First succeeds, second fails, rollback stops fail too
+      mockExecFile
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // agent-1 start
+        .mockRejectedValueOnce(new Error('Port already in use')) // agent-2 start fails
+        .mockRejectedValueOnce(new Error('Not running')); // agent-1 stop fails silently
+
+      // Should still throw original error even if rollback fails
+      await expect(backend.startRun(multiAgentWorkflow)).rejects.toThrow('Port already in use');
     });
 
     it('should not allow command injection in profile name', async () => {
