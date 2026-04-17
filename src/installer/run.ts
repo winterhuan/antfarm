@@ -119,6 +119,11 @@ export async function runWorkflow(params: {
 /**
  * Determine the "primary" backend for a run (the one with most agents).
  * Used for backward-compatible metadata storage.
+ *
+ * Tie-break: If multiple backends have equal agent counts, the one that
+ * appears first in the Map iteration order wins (determined by insertion
+ * order, which follows workflow.agents order). This is arbitrary but
+ * deterministic.
  */
 function getPrimaryBackend(agentsByBackend: Map<BackendType, unknown[]>): BackendType {
   let maxCount = 0;

@@ -52,10 +52,20 @@ export class HermesBackend implements Backend {
   }
 
   async startRun(workflow: WorkflowSpec): Promise<void> {
-    for (const agent of workflow.agents) {
-      const profileName = getProfileName(workflow.id, agent.id);
-      // Use array args to prevent shell injection; --profile goes before subcommand
-      await exec('hermes', ['--profile', profileName, 'gateway', 'start']);
+    const started: string[] = [];
+    try {
+      for (const agent of workflow.agents) {
+        const profileName = getProfileName(workflow.id, agent.id);
+        // Use array args to prevent shell injection; --profile goes before subcommand
+        await exec('hermes', ['--profile', profileName, 'gateway', 'start']);
+        started.push(profileName);
+      }
+    } catch (err) {
+      // Rollback: stop already started gateways
+      for (const profileName of started) {
+        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+      }
+      throw err;
     }
   }
 
@@ -85,6 +95,12 @@ export class HermesBackend implements Backend {
 
     // Profile doesn't exist - create it
     await exec('hermes', ['profile', 'create', profileName, '--clone', '--clone-from', 'default']);
+
+    // Write marker immediately to mark profile as antfarm-owned before any further work
+    // This ensures "profile exists but marker missing" can never happen
+    const workspaceDir = path.join(os.homedir(), '.hermes', 'profiles', profileName, 'workspace');
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(path.join(workspaceDir, '.antfarm'), workflowId, 'utf-8');
   }
 
   private async listAllProfiles(): Promise<string[]> {
@@ -108,7 +124,9 @@ export class HermesBackend implements Backend {
         return false;
       }
 
-      // Verify by checking if the profile's workspace exists and has our marker
+      // Verify by checking if the profile's workspace has our marker
+      // Since marker is written immediately after profile creation, "marker missing" means
+      // "not owned by us" (either external profile or partial install from different workflow)
       const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
       const antfarmMarker = path.join(profileDir, 'workspace', '.antfarm');
 
@@ -116,34 +134,10 @@ export class HermesBackend implements Backend {
         await fs.access(antfarmMarker);
         const markerContent = await fs.readFile(antfarmMarker, 'utf-8');
         return markerContent.trim() === workflowId;
-      } catch (markerErr) {
-        // Marker doesn't exist - check if this is a partial install (profile exists but workspace not created)
-        // In this case, treat it as owned by us since naming convention matches
-        const profileExists = await this.profileDirExists(profileName);
-        if (profileExists) {
-          // Partial install - profile created but marker not written yet
-          // Create marker now to complete ownership claim
-          try {
-            const workspaceDir = path.join(profileDir, 'workspace');
-            await fs.mkdir(workspaceDir, { recursive: true });
-            await fs.writeFile(antfarmMarker, workflowId, 'utf-8');
-            return true;
-          } catch {
-            return false;
-          }
-        }
+      } catch {
+        // Marker doesn't exist or can't be read - not owned by us
         return false;
       }
-    } catch {
-      return false;
-    }
-  }
-
-  private async profileDirExists(profileName: string): Promise<boolean> {
-    try {
-      const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
-      const stat = await fs.stat(profileDir);
-      return stat.isDirectory();
     } catch {
       return false;
     }
@@ -161,9 +155,8 @@ export class HermesBackend implements Backend {
 
     await fs.mkdir(workspaceDir, { recursive: true });
 
-    // Create antfarm ownership marker file
-    const markerPath = path.join(workspaceDir, '.antfarm');
-    await fs.writeFile(markerPath, workflowId, 'utf-8');
+    // Note: .antfarm marker is already written by createProfile()
+    // We just ensure workspace files are copied here
 
     // Copy agent workspace files
     for (const [fileName, relativePath] of Object.entries(agent.workspace.files)) {
