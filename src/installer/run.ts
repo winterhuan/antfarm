@@ -3,16 +3,23 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { getDb, nextRunNumber } from "../db.js";
 import { logger } from "../lib/logger.js";
-import { ensureWorkflowCrons } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
+import { createBackend } from "../backend/index.js";
+import type { BackendType } from "../backend/interface.js";
 
 export async function runWorkflow(params: {
   workflowId: string;
   taskTitle: string;
   notifyUrl?: string;
+  backend?: BackendType;
 }): Promise<{ id: string; runNumber: number; workflowId: string; task: string; status: string }> {
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
+
+  // Resolve backend: CLI arg > workflow default > global default
+  const backendType = params.backend ?? workflow.defaultBackend ?? 'openclaw';
+  const backend = createBackend(backendType);
+
   const db = getDb();
   const now = new Date().toISOString();
   const runId = crypto.randomUUID();
@@ -52,15 +59,15 @@ export async function runWorkflow(params: {
     throw err;
   }
 
-  // Start crons for this workflow (no-op if already running from another run)
+  // Start the run via backend
   try {
-    await ensureWorkflowCrons(workflow);
+    await backend.startRun(workflow);
   } catch (err) {
-    // Roll back the run since it can't advance without crons
+    // Roll back the run since it can't advance without the backend
     const db2 = getDb();
     db2.prepare("UPDATE runs SET status = 'failed', updated_at = ? WHERE id = ?").run(new Date().toISOString(), runId);
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Cannot start workflow run: cron setup failed. ${message}`);
+    throw new Error(`Cannot start workflow run: backend start failed. ${message}`);
   }
 
   emitEvent({ ts: new Date().toISOString(), event: "run.started", runId, workflowId: workflow.id });

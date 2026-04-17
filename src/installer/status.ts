@@ -1,6 +1,9 @@
 import { getDb } from "../db.js";
-import { teardownWorkflowCronsIfIdle } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
+import { loadWorkflowSpec } from "./workflow-spec.js";
+import { resolveWorkflowDir } from "./paths.js";
+import { createBackend } from "../backend/index.js";
+import type { BackendType } from "../backend/interface.js";
 
 export type RunInfo = {
   id: string;
@@ -120,8 +123,17 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
   ).run(run.id);
   const cancelledSteps = Number(result.changes);
 
-  // Clean up cron jobs if no other active runs
-  await teardownWorkflowCronsIfIdle(run.workflow_id);
+  // Stop the backend for this workflow
+  try {
+    const workflowDir = resolveWorkflowDir(run.workflow_id);
+    const workflow = await loadWorkflowSpec(workflowDir);
+    const backendType = (workflow.defaultBackend ?? 'openclaw') as BackendType;
+    const backend = createBackend(backendType);
+    await backend.stopRun(workflow);
+  } catch (err) {
+    // Log error but don't fail - the run is already marked as cancelled
+    console.error(`Warning: Failed to stop backend for workflow ${run.workflow_id}:`, err);
+  }
 
   // Emit event
   emitEvent({
