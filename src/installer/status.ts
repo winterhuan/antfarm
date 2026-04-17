@@ -12,7 +12,6 @@ export type RunInfo = {
   task: string;
   status: string;
   context: string;
-  backend: string;
   created_at: string;
   updated_at: string;
 };

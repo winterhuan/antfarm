@@ -101,9 +101,6 @@ function migrate(db: DatabaseSync): void {
       ) WHERE run_number IS NULL
     `);
   }
-  if (!runColNames.has("backend")) {
-    db.exec("ALTER TABLE runs ADD COLUMN backend TEXT NOT NULL DEFAULT 'openclaw'");
-  }
 }
 
 export function nextRunNumber(): number {

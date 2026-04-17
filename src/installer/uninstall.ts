@@ -150,13 +150,22 @@ export async function uninstallWorkflow(params: {
     // Group agents by backend type using full resolver (respects CLI/agent/workflow/global/default)
     const agentsByBackend = await groupAgentsByBackend(workflow);
     // Uninstall each backend
+    const errors: Array<{ type: string; error: unknown }> = [];
     for (const [backendType] of agentsByBackend) {
       try {
         const backend = createBackend(backendType);
         await backend.uninstall(params.workflowId);
       } catch (err) {
-        console.error(`Warning: Failed to uninstall ${backendType} backend for workflow ${params.workflowId}:`, err);
+        errors.push({ type: backendType, error: err });
+        console.error(`Error: Failed to uninstall ${backendType} backend for workflow ${params.workflowId}:`, err);
       }
+    }
+    // If any backend uninstall failed, throw an error
+    if (errors.length > 0) {
+      throw new Error(
+        `Failed to uninstall ${errors.length} backend(s): ` +
+        errors.map(e => `${e.type}: ${e.error instanceof Error ? e.error.message : String(e.error)}`).join('; ')
+      );
     }
   } catch (err) {
     // Log but don't fail - workflow spec might not exist

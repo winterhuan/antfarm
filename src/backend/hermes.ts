@@ -104,13 +104,35 @@ export class HermesBackend implements Backend {
   }
 
   private async listAllProfiles(): Promise<string[]> {
+    const profilesDir = path.join(os.homedir(), '.hermes', 'profiles');
     try {
-      const { stdout } = await exec('hermes', ['profile', 'list']);
-      return stdout
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .map(line => line.split(/\s+/)[0]);
+      const entries = await fs.readdir(profilesDir, { withFileTypes: true });
+      return entries
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name);
+    } catch {
+      // Directory doesn't exist or can't be read
+      return [];
+    }
+  }
+
+  private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
+    const profilesDir = path.join(os.homedir(), '.hermes', 'profiles');
+    const prefix = `${workflowId}-`;
+
+    try {
+      const entries = await fs.readdir(profilesDir, { withFileTypes: true });
+      return entries
+        .filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))
+        .map(entry => {
+          // Exact prefix match: profile must be "{workflowId}-{agentId}"
+          // This prevents "foo" matching "foo-bar" - only "foo-{agentId}" matches
+          const name = entry.name;
+          const suffix = name.slice(prefix.length);
+          // Suffix must be non-empty (the agent ID)
+          return suffix.length > 0 ? name : null;
+        })
+        .filter((name): name is string => name !== null);
     } catch {
       return [];
     }
@@ -196,30 +218,5 @@ export class HermesBackend implements Backend {
       '--every', '5m',
       '--prompt', prompt,
     ]);
-  }
-
-  private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
-    try {
-      const { stdout } = await exec('hermes', ['profile', 'list']);
-      const prefix = `${workflowId}-`;
-
-      return stdout
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .map(line => line.split(/\s+/)[0])
-        .filter(profileName => {
-          // Exact prefix match: profile must start with "{workflowId}-" followed by agent ID
-          // This prevents "foo" matching "foo-bar" - only "foo-{agentId}" should match
-          if (!profileName.startsWith(prefix)) {
-            return false;
-          }
-          const suffix = profileName.slice(prefix.length);
-          // Suffix must be non-empty (the agent ID)
-          return suffix.length > 0;
-        });
-    } catch {
-      return [];
-    }
   }
 }

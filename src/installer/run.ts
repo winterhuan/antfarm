@@ -23,9 +23,6 @@ export async function runWorkflow(params: {
   // Resolve backend per-agent and group by type (CLI > agent > workflow > global > default)
   const agentsByBackend = await groupAgentsByBackend(workflow, params.backend);
 
-  // For backward compatibility, store the "primary" backend (most agents)
-  const primaryBackendType = getPrimaryBackend(agentsByBackend);
-
   const db = getDb();
   const now = new Date().toISOString();
   const runId = crypto.randomUUID();
@@ -40,9 +37,9 @@ export async function runWorkflow(params: {
   try {
     const notifyUrl = params.notifyUrl ?? workflow.notifications?.url ?? null;
     const insertRun = db.prepare(
-      "INSERT INTO runs (id, run_number, workflow_id, task, status, context, notify_url, backend, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)"
+      "INSERT INTO runs (id, run_number, workflow_id, task, status, context, notify_url, created_at, updated_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?)"
     );
-    insertRun.run(runId, runNumber, workflow.id, params.taskTitle, JSON.stringify(initialContext), notifyUrl, primaryBackendType, now, now);
+    insertRun.run(runId, runNumber, workflow.id, params.taskTitle, JSON.stringify(initialContext), notifyUrl, now, now);
 
     const insertStep = db.prepare(
       "INSERT INTO steps (id, run_id, step_id, agent_id, step_index, input_template, expects, status, max_retries, type, loop_config, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -114,27 +111,4 @@ export async function runWorkflow(params: {
   });
 
   return { id: runId, runNumber, workflowId: workflow.id, task: params.taskTitle, status: "running" };
-}
-
-/**
- * Determine the "primary" backend for a run (the one with most agents).
- * Used for backward-compatible metadata storage.
- *
- * Tie-break: If multiple backends have equal agent counts, the one that
- * appears first in the Map iteration order wins (determined by insertion
- * order, which follows workflow.agents order). This is arbitrary but
- * deterministic.
- */
-function getPrimaryBackend(agentsByBackend: Map<BackendType, unknown[]>): BackendType {
-  let maxCount = 0;
-  let primary: BackendType = 'openclaw';
-
-  for (const [type, agents] of agentsByBackend) {
-    if (agents.length > maxCount) {
-      maxCount = agents.length;
-      primary = type;
-    }
-  }
-
-  return primary;
 }
