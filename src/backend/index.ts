@@ -1,24 +1,6 @@
 import type { Backend, BackendType } from './interface.js';
 import { OpenClawBackend } from './openclaw.js';
-
-// Placeholder - will be implemented in Task 3
-class HermesBackend implements Backend {
-  async install(_workflow: any, _sourceDir: string): Promise<void> {
-    throw new Error('HermesBackend not implemented yet');
-  }
-
-  async uninstall(_workflowId: string): Promise<void> {
-    throw new Error('HermesBackend not implemented yet');
-  }
-
-  async startRun(_workflow: any): Promise<void> {
-    throw new Error('HermesBackend not implemented yet');
-  }
-
-  async stopRun(_workflow: any): Promise<void> {
-    throw new Error('HermesBackend not implemented yet');
-  }
-}
+import { HermesBackend } from './hermes.js';
 
 export function createBackend(type: BackendType): Backend {
   switch (type) {
