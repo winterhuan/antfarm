@@ -9,7 +9,7 @@ import { teardownWorkflowCronsIfIdle } from "./agent-cron.js";
 import { emitEvent } from "./events.js";
 import { logger } from "../lib/logger.js";
 import { sendSessionMessage } from "./gateway-api.js";
-import { getMaxRoleTimeoutSeconds } from "./install.js";
+import { getMaxRoleTimeoutSeconds } from "../backend/openclaw.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { isFrontendChange } from "../lib/frontend-detect.js";

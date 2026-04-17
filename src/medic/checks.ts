@@ -2,7 +2,7 @@
  * Medic health checks — modular functions that inspect DB state and return findings.
  */
 import { getDb } from "../db.js";
-import { getMaxRoleTimeoutSeconds } from "../installer/install.js";
+import { getMaxRoleTimeoutSeconds } from "../backend/openclaw.js";
 
 export type MedicSeverity = "info" | "warning" | "critical";
 export type MedicActionType =
