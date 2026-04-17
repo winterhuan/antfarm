@@ -1,6 +1,6 @@
 import type { BackendType } from './interface.js';
 import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
-import { getGlobalDefaultBackend } from '../lib/config.js';
+import { readAntfarmConfig } from '../lib/config.js';
 
 export interface BackendConfig {
   type: BackendType;
@@ -33,10 +33,10 @@ export async function resolveBackendConfig(
     return { type: workflow.defaultBackend, source: 'workflow' };
   }
 
-  // Priority 4: Global config file
-  const globalBackend = await getGlobalDefaultBackend();
-  if (globalBackend !== DEFAULT_BACKEND) {
-    return { type: globalBackend, source: 'global' };
+  // Priority 4: Global config file (if explicitly set)
+  const globalConfig = await readAntfarmConfig();
+  if (globalConfig.defaultBackend) {
+    return { type: globalConfig.defaultBackend, source: 'global' };
   }
 
   // Priority 5: Hardcoded default (lowest)

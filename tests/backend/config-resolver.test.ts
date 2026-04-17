@@ -4,7 +4,7 @@ import type { WorkflowSpec, WorkflowAgent } from '../../src/installer/types.js';
 
 // Mock the config module
 vi.mock('../../src/lib/config.js', () => ({
-  getGlobalDefaultBackend: vi.fn().mockResolvedValue('openclaw'),
+  readAntfarmConfig: vi.fn().mockResolvedValue({}),
 }));
 
 describe('resolveBackendConfig', () => {
@@ -40,7 +40,15 @@ describe('resolveBackendConfig', () => {
       expect(result.source).toBe('workflow');
     });
 
-    it('should use global default when no other config set', async () => {
+    it('should use global config when set', async () => {
+      const { readAntfarmConfig } = await import('../../src/lib/config.js');
+      vi.mocked(readAntfarmConfig).mockResolvedValue({ defaultBackend: 'hermes' });
+      const result = await resolveBackendConfig(baseAgent, baseWorkflow);
+      expect(result.type).toBe('hermes');
+      expect(result.source).toBe('global');
+    });
+
+    it('should use default when no other config set', async () => {
       const result = await resolveBackendConfig(baseAgent, baseWorkflow);
       expect(result.type).toBe('openclaw');
       expect(result.source).toBe('default');
