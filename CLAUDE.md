@@ -84,6 +84,24 @@ What this means in practice:
 
 Do NOT re-open this investigation assuming we missed a config. We didn't. If Hermes gains per-tool deny-list support upstream, that's the time to revisit.
 
+## Claude Code Backend (phase 1: install/uninstall only)
+
+The Claude Code backend writes workflow configuration into the **project's** `.claude/` directory (the repo where `antfarm workflow install` is run) rather than a per-agent profile. Artifacts:
+
+- `.claude/agents/<workflowId>_<agentId>.md` — subagent definition per workflow agent. Users can invoke these interactively via Claude Code's Agent tool. **Antfarm does not yet drive them autonomously** — the scheduler is a follow-up.
+- `.claude/settings.json` `permissions.deny` — union of role-based deny lists (Write/Edit/MultiEdit/NotebookEdit for read-only roles). Tracked under the `_antfarmManagedDeny` key so `uninstall` removes only antfarm-added entries.
+- `.claude/skills/antfarm-workflows/SKILL.md` — main-agent entry point for interactive use (parallels OpenClaw / Hermes skill install).
+
+`startRun` / `stopRun` are intentional no-ops. To advance a workflow on the Claude Code backend, use `antfarm workflow tick <agent-id>` (once the follow-up plan ships the scheduler) or invoke the subagent interactively.
+
+**Permission model vs Hermes:** Claude Code supports per-tool deny at the CLI flag level (`--disallowedTools "Write,Edit,..."`) and at the settings.json level. Both are used: settings as the persistent default, CLI flag as the per-spawn override. This is real enforcement — PoC verified that Claude actively attempts workarounds (`printf >`, `tee`, `cd + relative`) and all are blocked.
+
+**Required CLI flags for non-interactive use (from PoC):**
+- `--permission-mode bypassPermissions` — MANDATORY. Without this, every Bash call returns "requires approval" and the `-p` session fails silently.
+- `--disallowedTools "A,B,C"` — comma-separated; variadic flags eat following args, so always add `--` before the prompt.
+- `--bare` — skips CLAUDE.md auto-discovery / hooks / plugin sync for cheaper, context-isolated runs (~$0.06/turn on Opus-4.7-1M vs $0.15 without `--bare`).
+- `--max-budget-usd <n>` — post-hoc circuit breaker, not pre-check. Allows ~3× overshoot before tripping.
+
 ## Known limitations / won't-fix
 
 These are architectural constraints or low-risk edge cases we've deliberately not addressed. Listed here so they don't get re-investigated.
