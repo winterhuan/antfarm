@@ -224,7 +224,13 @@ export class OpenClawBackend implements Backend {
 
     await writeOpenClawConfig(configPath, config);
     await updateMainAgentGuidance();
-    await installAntfarmSkill();
+    const skillResult = await installAntfarmSkill();
+    if (!skillResult.installed) {
+      console.warn(
+        `Failed to install antfarm-workflows skill to ${skillResult.path}. ` +
+        `The workflow will run, but the main OpenClaw agent won't expose /antfarm-workflows.`
+      );
+    }
 
     // Create cron jobs for each agent
     for (const agent of workflow.agents) {
@@ -238,7 +244,7 @@ export class OpenClawBackend implements Backend {
         agentId,
         payload: {
           kind: 'agentTurn',
-          message: buildPollingPrompt(workflow.id, agent.id),
+          message: buildPollingPrompt(workflow.id, agent.id, undefined, agent.role ?? inferRole(agent.id)),
           model: agent.model ?? 'default',
           timeoutSeconds: agent.timeoutSeconds ?? 1800,
         },

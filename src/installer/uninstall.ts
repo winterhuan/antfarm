@@ -12,13 +12,14 @@ import {
   resolveWorkflowRoot,
 } from "./paths.js";
 import { removeSubagentAllowlist } from "./subagent-allowlist.js";
-import { uninstallAntfarmSkill } from "./skill-install.js";
+import { uninstallAntfarmSkill, uninstallAntfarmSkillForHermes } from "./skill-install.js";
 import { removeAgentCrons } from "./agent-cron.js";
 import { deleteAgentCronJobs } from "./gateway-api.js";
 import { getDb } from "../db.js";
 import { stopDaemon } from "../server/daemonctl.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { createBackend, groupAgentsByBackend } from "../backend/index.js";
+import { HermesBackend } from "../backend/hermes.js";
 import type { BackendType } from "../backend/interface.js";
 import type { WorkflowInstallResult } from "./types.js";
 
@@ -231,6 +232,21 @@ export async function uninstallAllWorkflows(): Promise<void> {
   const { path: configPath, config } = await readOpenClawConfig();
   const list = Array.isArray(config.agents?.list) ? config.agents?.list : [];
   const installedWorkflowIds = await listInstalledWorkflowIds();
+
+  // Hermes backend cleanup: remove per-workflow profiles (marker-verified) and
+  // the global antfarm-workflows skill from the default profile. Wrapped in
+  // try/catch per workflow so a single Hermes failure doesn't block OpenClaw
+  // cleanup from running.
+  const hermes = new HermesBackend();
+  for (const wfId of installedWorkflowIds) {
+    try {
+      await hermes.uninstall(wfId);
+    } catch (err) {
+      console.warn(`Failed to uninstall Hermes profiles for workflow "${wfId}":`, err);
+    }
+  }
+  await uninstallAntfarmSkillForHermes();
+
   const removedAgents = selectAntfarmManagedAgents(list, installedWorkflowIds);
   if (config.agents) {
     config.agents.list = list.filter((entry) => !removedAgents.includes(entry));

@@ -1,11 +1,38 @@
 import { createAgentCronJob, deleteAgentCronJobs, listCronJobs, checkCronToolAvailable } from "./gateway-api.js";
-import type { WorkflowSpec } from "./types.js";
+import type { WorkflowSpec, AgentRole } from "./types.js";
 import { resolveAntfarmCli } from "./paths.js";
 import { getDb } from "../db.js";
 import { readOpenClawConfig } from "./openclaw-config.js";
 
 const DEFAULT_EVERY_MS = 300_000; // 5 minutes
 const DEFAULT_AGENT_TIMEOUT_SECONDS = 30 * 60; // 30 minutes
+
+/**
+ * Soft, prompt-level constraints injected by role. This is the best we can do on
+ * backends (like Hermes) that don't support per-tool deny lists — see CLAUDE.md
+ * "Tool permission model" for why. Models can ignore these; they are guidance,
+ * not enforcement. OpenClaw additionally enforces via config-level tools.deny.
+ */
+const ROLE_GUARDRAILS: Record<AgentRole, string | null> = {
+  analysis:
+    "You are in ANALYSIS mode. Read, grep, and search freely, but DO NOT call write_file, patch, edit, or apply_patch. If the work asks you to modify code, put the proposed changes in your output text — do not apply them.",
+  verification:
+    "You are in VERIFICATION mode. Your job is to validate existing work, not change it. DO NOT call write_file, patch, edit, apply_patch, or any tool that modifies files. You MAY run read-only shell commands (lint, typecheck, test, git status, grep). Report PASS or FAIL in your output.",
+  testing:
+    "You are in TESTING mode. Your primary job is to run the existing test suite and report results. You MAY edit test files if the work input explicitly asks for it, but DO NOT modify application source code.",
+  pr:
+    "You are in PR mode. Create or update pull requests from already-committed changes using git and gh. DO NOT edit source files or tests — if something needs fixing, mark this step as failed and describe what's wrong.",
+  scanning:
+    "You are in SCANNING mode. You are read-only. DO NOT call write_file, patch, edit, or apply_patch. Use read_file, grep, search, and web_search/web_extract to find vulnerabilities. Output findings; do not fix them.",
+  coding: null,
+};
+
+function buildRoleGuardrail(role?: AgentRole): string {
+  if (!role) return "";
+  const text = ROLE_GUARDRAILS[role];
+  if (!text) return "";
+  return `\n🔒 ROLE CONSTRAINT (${role}): ${text}\n`;
+}
 
 function buildAgentPrompt(workflowId: string, agentId: string): string {
   const fullAgentId = `${workflowId}_${agentId}`;
@@ -51,12 +78,13 @@ RULES:
 The workflow cannot advance until you report. Your session ending without reporting = broken pipeline.`;
 }
 
-export function buildWorkPrompt(workflowId: string, agentId: string): string {
+export function buildWorkPrompt(workflowId: string, agentId: string, role?: AgentRole): string {
   const fullAgentId = `${workflowId}_${agentId}`;
   const cli = resolveAntfarmCli();
+  const roleGuardrail = buildRoleGuardrail(role);
 
   return `You are an Antfarm workflow agent. Execute the pending work below.
-
+${roleGuardrail}
 ⚠️ CRITICAL: You MUST call "step complete" or "step fail" before ending your session. If you don't, the workflow will be stuck forever. This is non-negotiable.
 
 The claimed step JSON is provided below. It contains: {"stepId": "...", "runId": "...", "input": "..."}
@@ -125,11 +153,11 @@ async function resolveAgentCronModel(agentId: string, requestedModel?: string): 
   return requestedModel;
 }
 
-export function buildPollingPrompt(workflowId: string, agentId: string, workModel?: string): string {
+export function buildPollingPrompt(workflowId: string, agentId: string, workModel?: string, role?: AgentRole): string {
   const fullAgentId = `${workflowId}_${agentId}`;
   const cli = resolveAntfarmCli();
   const model = workModel ?? "default";
-  const workPrompt = buildWorkPrompt(workflowId, agentId);
+  const workPrompt = buildWorkPrompt(workflowId, agentId, role);
 
   return `Step 1 — Quick check for pending work (lightweight, no side effects):
 \`\`\`
@@ -177,7 +205,7 @@ export async function setupAgentCrons(workflow: WorkflowSpec): Promise<void> {
     const pollingModel = await resolveAgentCronModel(agentId, requestedPollingModel);
     const requestedWorkModel = agent.model ?? workflowPollingModel;
     const workModel = await resolveAgentCronModel(agentId, requestedWorkModel);
-    const prompt = buildPollingPrompt(workflow.id, agent.id, workModel);
+    const prompt = buildPollingPrompt(workflow.id, agent.id, workModel, agent.role);
     const timeoutSeconds = workflowPollingTimeout;
 
     const result = await createAgentCronJob({
