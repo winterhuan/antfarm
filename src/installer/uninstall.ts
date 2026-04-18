@@ -12,7 +12,7 @@ import {
   resolveWorkflowRoot,
 } from "./paths.js";
 import { removeSubagentAllowlist } from "./subagent-allowlist.js";
-import { uninstallAntfarmSkill, uninstallAntfarmSkillForHermes } from "./skill-install.js";
+import { uninstallAntfarmSkill, uninstallAntfarmSkillForHermes, uninstallAntfarmSkillForClaudeCode } from "./skill-install.js";
 import { removeAgentCrons } from "./agent-cron.js";
 import { deleteAgentCronJobs } from "./gateway-api.js";
 import { getDb } from "../db.js";
@@ -20,6 +20,7 @@ import { stopDaemon } from "../server/daemonctl.js";
 import { loadWorkflowSpec } from "./workflow-spec.js";
 import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import { HermesBackend } from "../backend/hermes.js";
+import { ClaudeCodeBackend } from "../backend/claude-code.js";
 import type { BackendType } from "../backend/interface.js";
 import type { WorkflowInstallResult } from "./types.js";
 
@@ -246,6 +247,19 @@ export async function uninstallAllWorkflows(): Promise<void> {
     }
   }
   await uninstallAntfarmSkillForHermes();
+
+  // Claude Code backend cleanup: for each installed workflow, remove subagent
+  // files and antfarm-managed deny entries from the project's .claude/. Then
+  // remove the antfarm-workflows skill from .claude/skills/.
+  const claudeCode = new ClaudeCodeBackend();
+  for (const wfId of installedWorkflowIds) {
+    try {
+      await claudeCode.uninstall(wfId);
+    } catch (err) {
+      console.warn(`Failed to uninstall Claude Code artifacts for workflow "${wfId}":`, err);
+    }
+  }
+  await uninstallAntfarmSkillForClaudeCode(process.cwd());
 
   const removedAgents = selectAntfarmManagedAgents(list, installedWorkflowIds);
   if (config.agents) {
