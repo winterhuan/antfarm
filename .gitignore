@@ -6,3 +6,15 @@ dist/
 *.sqlite3
 progress.txt
 progress*.txt
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# Editor / tool artifacts
+.claude/settings.local.json
+*.tsbuildinfo
+coverage/
+*.log
+*.swp
