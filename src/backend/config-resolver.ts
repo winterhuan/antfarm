@@ -33,7 +33,7 @@ export async function resolveBackendConfig(
 
   // Priority 4: Global config file (if explicitly set)
   const globalConfig = await readAntfarmConfig();
-  if (globalConfig.defaultBackend) {
+  if (globalConfig?.defaultBackend) {
     return { type: globalConfig.defaultBackend, source: 'global' };
   }
 

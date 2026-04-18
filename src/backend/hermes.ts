@@ -56,12 +56,10 @@ export class HermesBackend implements Backend {
     try {
       for (const agent of workflow.agents) {
         const profileName = getProfileName(workflow.id, agent.id);
-        // Use array args to prevent shell injection; --profile goes before subcommand
         await exec('hermes', ['--profile', profileName, 'gateway', 'start']);
         started.push(profileName);
       }
     } catch (err) {
-      // Rollback: stop already started gateways
       for (const profileName of started) {
         await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
       }
@@ -97,7 +95,6 @@ export class HermesBackend implements Backend {
     await exec('hermes', ['profile', 'create', profileName, '--clone', '--clone-from', 'default']);
 
     // Write marker immediately to mark profile as antfarm-owned before any further work
-    // This ensures "profile exists but marker missing" can never happen
     const workspaceDir = path.join(os.homedir(), '.hermes', 'profiles', profileName, 'workspace');
     await fs.mkdir(workspaceDir, { recursive: true });
     await fs.writeFile(path.join(workspaceDir, '.antfarm'), workflowId, 'utf-8');
@@ -122,9 +119,15 @@ export class HermesBackend implements Backend {
 
   private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
     const prefix = `${workflowId}-`;
-    // Exact prefix match: profile must be "{workflowId}-{agentId}" with a non-empty agent ID.
-    // Prevents "foo" matching "foo-bar-*" profiles belonging to other workflows.
-    return this.scanProfiles((name) => name.startsWith(prefix) && name.length > prefix.length);
+    // Find profiles that start with the workflow prefix and verify ownership via marker file
+    const candidates = await this.scanProfiles((name) => name.startsWith(prefix) && name.length > prefix.length);
+    // Verify ownership to filter out profiles from other workflows (e.g., "test-workflow-2-*" when looking for "test-workflow-*")
+    const ownershipChecks = candidates.map(async (profileName) => {
+      const isOwned = await this.verifyProfileOwnership(workflowId, profileName);
+      return isOwned ? profileName : null;
+    });
+    const results = await Promise.all(ownershipChecks);
+    return results.filter((name): name is string => name !== null);
   }
 
   private async verifyProfileOwnership(workflowId: string, profileName: string): Promise<boolean> {

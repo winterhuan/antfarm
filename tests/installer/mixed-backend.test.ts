@@ -139,24 +139,33 @@ describe('runWorkflow mixed-backend integration', () => {
     const openclawStopSpy = vi.fn(openclawStop);
     const hermesStopSpy = vi.fn(hermesStop);
 
-    vi.doMock('../../src/backend/openclaw.js', () => ({
-      OpenClawBackend: vi.fn().mockImplementation(() => ({
-        install: vi.fn().mockResolvedValue(undefined),
-        uninstall: vi.fn().mockResolvedValue(undefined),
-        startRun: openclawStartSpy,
-        stopRun: openclawStopSpy,
-      })),
-      getMaxRoleTimeoutSeconds: () => 1800,
-    }));
-
-    vi.doMock('../../src/backend/hermes.js', () => ({
-      HermesBackend: vi.fn().mockImplementation(() => ({
-        install: vi.fn().mockResolvedValue(undefined),
-        uninstall: vi.fn().mockResolvedValue(undefined),
-        startRun: hermesStartSpy,
-        stopRun: hermesStopSpy,
-      })),
-      getProfileName: (wfId: string, agId: string) => `${wfId}-${agId}`,
+    vi.doMock('../../src/backend/index.js', () => ({
+      createBackend: vi.fn((type: 'openclaw' | 'hermes') => {
+        if (type === 'openclaw') {
+          return {
+            install: vi.fn().mockResolvedValue(undefined),
+            uninstall: vi.fn().mockResolvedValue(undefined),
+            startRun: openclawStartSpy,
+            stopRun: openclawStopSpy,
+          };
+        }
+        return {
+          install: vi.fn().mockResolvedValue(undefined),
+          uninstall: vi.fn().mockResolvedValue(undefined),
+          startRun: hermesStartSpy,
+          stopRun: hermesStopSpy,
+        };
+      }),
+      groupAgentsByBackend: vi.fn(async (workflow: WorkflowSpec) => {
+        const groups = new Map<'openclaw' | 'hermes', WorkflowAgent[]>();
+        for (const agent of workflow.agents) {
+          const backend = agent.backend || workflow.defaultBackend || 'openclaw';
+          const list = groups.get(backend as 'openclaw' | 'hermes') ?? [];
+          list.push(agent);
+          groups.set(backend as 'openclaw' | 'hermes', list);
+        }
+        return groups;
+      }),
     }));
 
     vi.doMock('../../src/installer/workflow-spec.js', () => ({

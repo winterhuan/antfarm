@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { OpenClawBackend } from '../../src/backend/openclaw.js';
 
+// Mock db.js to avoid node:sqlite dependency
+vi.mock('../../src/db.js', () => ({
+  getDb: vi.fn(() => ({})),
+}));
+
 describe('OpenClawBackend', () => {
   it('should create an instance', () => {
     const backend = new OpenClawBackend();

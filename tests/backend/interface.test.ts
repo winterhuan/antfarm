@@ -1,4 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// Mock db.js to avoid node:sqlite dependency
+vi.mock('../../src/db.js', () => ({
+  getDb: vi.fn(() => ({})),
+}));
+
 import { createBackend, type Backend } from '../../src/backend/index.js';
 
 describe('Backend Interface', () => {
