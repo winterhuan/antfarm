@@ -118,3 +118,37 @@ export async function uninstallAntfarmSkillForHermes(): Promise<void> {
     // Already gone
   }
 }
+
+/**
+ * Claude Code scans `<projectDir>/.claude/skills/<name>/SKILL.md`. We install
+ * the antfarm-workflows skill into the project directory so the skill ships
+ * with the workflow repo.
+ */
+function getClaudeCodeProjectSkillsDir(projectDir: string): string {
+  return path.join(projectDir, ".claude", "skills");
+}
+
+/**
+ * Install the antfarm-workflows skill into a project's .claude/skills/ dir
+ * for the Claude Code backend. Idempotent — overwrites SKILL.md on each call.
+ */
+export async function installAntfarmSkillForClaudeCode(projectDir: string): Promise<{ installed: boolean; path: string }> {
+  const cli = `node ${resolveAntfarmCli()}`;
+  const forceTrigger = `To skip the scheduled polling wait, run \`${cli} workflow tick <agent-id>\` (once the Claude Code backend scheduler is implemented; pending follow-up plan).`;
+  return writeAntfarmSkill(getClaudeCodeProjectSkillsDir(projectDir), {
+    antfarmCli: cli,
+    forceTriggerSection: forceTrigger,
+  });
+}
+
+/**
+ * Uninstall the antfarm-workflows skill from a project's .claude/skills/ dir.
+ */
+export async function uninstallAntfarmSkillForClaudeCode(projectDir: string): Promise<void> {
+  const destDir = path.join(getClaudeCodeProjectSkillsDir(projectDir), "antfarm-workflows");
+  try {
+    await fs.rm(destDir, { recursive: true, force: true });
+  } catch {
+    // Already gone
+  }
+}
