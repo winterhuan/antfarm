@@ -107,8 +107,15 @@ describe('HermesBackend', () => {
   });
 
   describe('getProfileName', () => {
-    it('should generate correct profile name', () => {
-      expect(getProfileName('my-workflow', 'agent-1')).toBe('my-workflow-agent-1');
+    it('should generate correct profile name with underscore separator', () => {
+      // New naming: underscore separator avoids namespace collisions
+      // workflow=foo + agent=bar-baz => foo_bar-baz
+      // workflow=foo-bar + agent=baz => foo-bar_baz
+      expect(getProfileName('my-workflow', 'agent-1')).toBe('my-workflow_agent-1');
+      expect(getProfileName('foo', 'bar-baz')).toBe('foo_bar-baz');
+      expect(getProfileName('foo-bar', 'baz')).toBe('foo-bar_baz');
+      // These are now distinct (unlike hyphen-only separation)
+      expect(getProfileName('foo', 'bar-baz')).not.toBe(getProfileName('foo-bar', 'baz'));
     });
   });
 
@@ -131,20 +138,20 @@ describe('HermesBackend', () => {
           (call[1] as string[])?.[0] === 'profile' && (call[1] as string[])?.[1] === 'create'
       );
       expect(createCall).toBeDefined();
-      expect(createCall![1]).toEqual(['profile', 'create', 'test-workflow-agent-1', '--clone', '--clone-from', 'default']);
+      expect(createCall![1]).toEqual(['profile', 'create', 'test-workflow_agent-1', '--clone', '--clone-from', 'default']);
     });
 
     it('should use hermes config set for configuration', async () => {
       await backend.install(mockWorkflow, '/source/dir');
 
       // Should set model (--profile before subcommand)
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'config', 'set', 'model.model', 'claude-3-sonnet']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'config', 'set', 'model.model', 'claude-3-sonnet']);
 
       // Should set timeout (--profile before subcommand)
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'config', 'set', 'timeout.seconds', '1800']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'config', 'set', 'timeout.seconds', '1800']);
 
       // Should set terminal backend and cwd (--profile before subcommand)
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'config', 'set', 'terminal.backend', 'local']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'config', 'set', 'terminal.backend', 'local']);
       const cwdCall = mockExecFile.mock.calls.find(
         (call: unknown[]) =>
           (call[1] as string[])?.[0] === '--profile' &&
@@ -154,11 +161,19 @@ describe('HermesBackend', () => {
     });
 
     it('should use hermes cron add for cron setup', async () => {
+      // Mock empty cron list for idempotency check
+      mockExecFile.mockImplementation((cmd: string, args: string[]) => {
+        if (args.includes('cron') && args.includes('list')) {
+          return Promise.resolve({ stdout: 'No scheduled jobs.', stderr: '' });
+        }
+        return Promise.resolve({ stdout: '', stderr: '' });
+      });
+
       await backend.install(mockWorkflow, '/source/dir');
 
       // --profile goes before subcommand
       expectExecCall(mockExecFile, 'hermes', [
-        '--profile', 'test-workflow-agent-1',
+        '--profile', 'test-workflow_agent-1',
         'cron', 'add',
         '--name', 'antfarm/test-workflow/agent-1',
         '--every', '5m',
@@ -179,22 +194,38 @@ describe('HermesBackend', () => {
       );
     });
 
-    it('should create .antfarm marker file with workflow ID', async () => {
+    it('should create .antfarm marker file with JSON content', async () => {
       await backend.install(mockWorkflow, '/source/dir');
 
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringContaining('.antfarm'),
-        'test-workflow',
+        expect.stringContaining('test-workflow'), // JSON string contains workflowId
         'utf-8'
       );
+
+      // Verify it's valid JSON with expected structure
+      const markerCall = mockWriteFile.mock.calls.find(
+        (call: unknown[]) => String(call[0]).includes('.antfarm')
+      );
+      expect(markerCall).toBeDefined();
+      const markerContent = markerCall![1] as string;
+      const marker = JSON.parse(markerContent);
+      expect(marker.workflowId).toBe('test-workflow');
+      expect(marker.version).toBe(1);
+      expect(marker.createdAt).toBeDefined();
     });
 
     it('should throw error if profile already exists for different workflow', async () => {
       // Profile already present on disk (returned by fs.readdir)
-      mockReaddir.mockResolvedValue([dirent('test-workflow-agent-1')]);
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1')])
+;
       // Marker exists but belongs to another workflow
-      mockAccess.mockResolvedValue(undefined);
-      mockReadFile.mockResolvedValue('different-workflow');
+      mockReadFile.mockImplementation((path: string) => {
+        if (String(path).includes('.antfarm')) {
+          return Promise.resolve(JSON.stringify({ workflowId: 'different-workflow', version: 1, createdAt: '2024-01-01' }));
+        }
+        return Promise.resolve('');
+      });
 
       await expect(backend.install(mockWorkflow, '/source/dir')).rejects.toThrow(
         'belongs to a different workflow'
@@ -203,8 +234,9 @@ describe('HermesBackend', () => {
 
     it('should reject when profile exists without marker (external profile, not ours)', async () => {
       // Profile dir exists on disk but marker file is missing — treat as external
-      mockReaddir.mockResolvedValue([dirent('test-workflow-agent-1')]);
-      mockAccess.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1')])
+;
+      mockReadFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
       await expect(backend.install(mockWorkflow, '/source/dir')).rejects.toThrow(
         'belongs to a different workflow'
@@ -212,9 +244,14 @@ describe('HermesBackend', () => {
     });
 
     it('should skip creation and continue setup when profile is already owned by same workflow', async () => {
-      mockReaddir.mockResolvedValue([dirent('test-workflow-agent-1')]);
-      mockAccess.mockResolvedValue(undefined);
-      mockReadFile.mockResolvedValue('test-workflow');
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1')])
+;
+      mockReadFile.mockImplementation((path: string) => {
+        if (String(path).includes('.antfarm')) {
+          return Promise.resolve(JSON.stringify({ workflowId: 'test-workflow', version: 1, createdAt: '2024-01-01' }));
+        }
+        return Promise.resolve('');
+      });
 
       await backend.install(mockWorkflow, '/source/dir');
 
@@ -225,7 +262,80 @@ describe('HermesBackend', () => {
       expect(createCalls).toHaveLength(0);
 
       // But should still configure + setup cron
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'config', 'set', 'model.model', 'claude-3-sonnet']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'config', 'set', 'model.model', 'claude-3-sonnet']);
+    });
+
+    it('should install workspace skills', async () => {
+      const skillWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [{
+          ...mockWorkflow.agents[0],
+          workspace: {
+            baseDir: 'agent-1',
+            files: { 'CLAUDE.md': './CLAUDE.md' },
+            skills: ['agent-browser', 'web-search'],
+          },
+        }],
+      };
+
+      await backend.install(skillWorkflow, '/source/dir');
+
+      // Should install skills
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'skills', 'install', 'agent-browser', '--yes']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'skills', 'install', 'web-search', '--yes']);
+    });
+
+    it('should skip cron add if cron already exists (idempotent)', async () => {
+      // Mock cron list returning existing cron (text format)
+      mockExecFile.mockImplementation((cmd: string, args: string[]) => {
+        if (args.includes('cron') && args.includes('list')) {
+          return Promise.resolve({ stdout: 'antfarm/test-workflow/agent-1 - every 5m', stderr: '' });
+        }
+        return Promise.resolve({ stdout: '', stderr: '' });
+      });
+
+      await backend.install(mockWorkflow, '/source/dir');
+
+      // Should NOT call cron add
+      const cronAddCalls = mockExecFile.mock.calls.filter(
+        (call: unknown[]) => (call[1] as string[])?.[2] === 'cron' && (call[1] as string[])?.[3] === 'add'
+      );
+      expect(cronAddCalls).toHaveLength(0);
+    });
+
+    it('should use ?? for timeout to preserve 0 as valid value', async () => {
+      const zeroTimeoutWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [{ ...mockWorkflow.agents[0], timeoutSeconds: 0 }],
+      };
+
+      await backend.install(zeroTimeoutWorkflow, '/source/dir');
+
+      // Should set timeout to '0' not the default
+      const timeoutCall = mockExecFile.mock.calls.find(
+        (call: unknown[]) =>
+          (call[1] as string[])?.[0] === '--profile' &&
+          (call[1] as string[])?.[4] === 'timeout.seconds'
+      );
+      expect(timeoutCall).toBeDefined();
+      expect((timeoutCall![1] as string[])[5]).toBe('0');
+    });
+
+    it('should use default model when not specified', async () => {
+      const noModelWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [{ ...mockWorkflow.agents[0], model: undefined }],
+      };
+
+      await backend.install(noModelWorkflow, '/source/dir');
+
+      const modelCall = mockExecFile.mock.calls.find(
+        (call: unknown[]) =>
+          (call[1] as string[])?.[0] === '--profile' &&
+          (call[1] as string[])?.[4] === 'model.model'
+      );
+      expect(modelCall).toBeDefined();
+      expect((modelCall![1] as string[])[5]).toBe('default');
     });
   });
 
@@ -253,55 +363,127 @@ describe('HermesBackend', () => {
       expect(markerIdx).toBeGreaterThan(createIdx);
       expect(markerIdx).toBeLessThan(copyIdx);
     });
+
+    it('should rollback on install failure', async () => {
+      mockReaddir.mockResolvedValue([]);
+
+      // First agent succeeds, second fails
+      const multiAgentWorkflow: WorkflowSpec = {
+        ...mockWorkflow,
+        agents: [
+          { ...mockWorkflow.agents[0], id: 'agent-1' },
+          { ...mockWorkflow.agents[0], id: 'agent-2' },
+        ],
+      };
+
+      let callCount = 0;
+      mockExecFile.mockImplementation((cmd: string, args: string[]) => {
+        callCount++;
+        // Fail on the second agent's cron setup
+        if (args.includes('cron') && args.includes('add') && args.includes('agent-2')) {
+          return Promise.reject(new Error('Cron setup failed'));
+        }
+        if (args.includes('cron') && args.includes('list')) {
+          return Promise.resolve({ stdout: '[]', stderr: '' });
+        }
+        return Promise.resolve({ stdout: '', stderr: '' });
+      });
+
+      await expect(backend.install(multiAgentWorkflow, '/source/dir')).rejects.toThrow('Cron setup failed');
+
+      // Should have tried to clean up agent-1 (stop gateway, delete profile)
+      const stopCalls = mockExecFile.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[1] as string[])?.[1] === 'test-workflow_agent-1' &&
+          (call[1] as string[])?.[3] === 'stop'
+      );
+      expect(stopCalls.length).toBeGreaterThanOrEqual(1);
+
+      const deleteCalls = mockExecFile.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[1] as string[])?.[1] === 'test-workflow_agent-1' &&
+          (call[1] as string[])?.[2] === 'profile' &&
+          (call[1] as string[])?.[3] === 'delete'
+      );
+      expect(deleteCalls.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('uninstall', () => {
     it('should stop gateway with hermes --profile gateway stop', async () => {
-      mockReaddir.mockResolvedValue([dirent('test-workflow-agent-1')]);
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1')])
+;
+      mockReadFile.mockResolvedValue(JSON.stringify({ workflowId: 'test-workflow', version: 1 }));
 
       await backend.uninstall('test-workflow');
 
       // --profile goes before subcommand
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'gateway', 'stop']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'gateway', 'stop']);
     });
 
     it('should delete profiles with hermes --profile profile delete', async () => {
-      mockReaddir.mockResolvedValue([dirent('test-workflow-agent-1')]);
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1')])
+;
+      mockReadFile.mockResolvedValue(JSON.stringify({ workflowId: 'test-workflow', version: 1 }));
 
       await backend.uninstall('test-workflow');
 
       // --profile goes before subcommand
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'profile', 'delete', '--yes']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'profile', 'delete', '--yes']);
     });
 
     it('should only list profiles with exact workflow prefix', async () => {
-      // Profile dir contains both "test-workflow-*" and a differently-prefixed profile.
-      // "test-workflow-2-agent-1" shares a prefix but belongs to a different workflow id.
+      // Profile dir contains both "test-workflow_*" and a differently-prefixed profile.
+      // "test-workflow-2_agent-1" shares a prefix but belongs to a different workflow id.
       mockReaddir.mockResolvedValue([
-        dirent('test-workflow-agent-1'),
-        dirent('test-workflow-2-agent-1'),
+        dirent('test-workflow_agent-1'),
+        dirent('test-workflow-2_agent-1'),
         dirent('unrelated-profile'),
       ]);
 
       // Mock marker file checks - verifyProfileOwnership reads the marker
-      mockAccess.mockResolvedValue(undefined);
       mockReadFile.mockImplementation((path: string) => {
-        if (path.includes('test-workflow-2')) return Promise.resolve('test-workflow-2');
-        if (path.includes('test-workflow-agent-1')) return Promise.resolve('test-workflow');
+        if (String(path).includes('test-workflow-2_agent-1')) {
+          return Promise.resolve(JSON.stringify({ workflowId: 'test-workflow-2', version: 1 }));
+        }
+        if (String(path).includes('test-workflow_agent-1')) {
+          return Promise.resolve(JSON.stringify({ workflowId: 'test-workflow', version: 1 }));
+        }
         return Promise.reject(new Error('ENOENT'));
       });
 
       await backend.uninstall('test-workflow');
 
-      // Should only delete test-workflow-agent-1 (command: ['--profile', name, 'profile', 'delete', '--yes'])
+      // Should only delete test-workflow_agent-1 (command: ['--profile', name, 'profile', 'delete', '--yes'])
       const deleteCalls = mockExecFile.mock.calls.filter(
         (call: unknown[]) => (call[1] as string[])?.[2] === 'profile' && (call[1] as string[])?.[3] === 'delete'
       );
       expect(deleteCalls).toHaveLength(1);
-      expect(deleteCalls[0][1]).toContain('test-workflow-agent-1');
+      expect(deleteCalls[0][1]).toContain('test-workflow_agent-1');
       // Guard against a regression where the prefix filter loosens
-      expect(deleteCalls[0][1]).not.toContain('test-workflow-2-agent-1');
+      expect(deleteCalls[0][1]).not.toContain('test-workflow-2_agent-1');
       expect(deleteCalls[0][1]).not.toContain('unrelated-profile');
+    });
+
+    it('should verify ownership before deletion and skip unowned profiles', async () => {
+      mockReaddir.mockResolvedValue([dirent('test-workflow_agent-1'), dirent('test-workflow_agent-2')]);
+
+      // agent-1 belongs to us, agent-2 belongs to another workflow
+      mockReadFile.mockImplementation((path: string) => {
+        if (String(path).includes('agent-2')) {
+          return Promise.resolve(JSON.stringify({ workflowId: 'other-workflow', version: 1 }));
+        }
+        return Promise.resolve(JSON.stringify({ workflowId: 'test-workflow', version: 1 }));
+      });
+
+      await backend.uninstall('test-workflow');
+
+      // Should only delete agent-1
+      const deleteCalls = mockExecFile.mock.calls.filter(
+        (call: unknown[]) => (call[1] as string[])?.[2] === 'profile' && (call[1] as string[])?.[3] === 'delete'
+      );
+      expect(deleteCalls).toHaveLength(1);
+      expect(deleteCalls[0][1]).toContain('test-workflow_agent-1');
     });
 
     it('should not fail when hermes profiles dir does not exist', async () => {
@@ -316,7 +498,7 @@ describe('HermesBackend', () => {
       await backend.startRun(mockWorkflow);
 
       // --profile goes before subcommand
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'gateway', 'start']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'gateway', 'start']);
     });
 
     it('should rollback already started gateways when one fails', async () => {
@@ -381,7 +563,7 @@ describe('HermesBackend', () => {
       );
       expect(call).toBeDefined();
       // Profile name should contain the literal string, not be split by shell
-      expect((call as unknown[])[1]).toContain('test; rm -rf /; #-agent-1');
+      expect((call as unknown[])[1]).toContain('test; rm -rf /; #_agent-1');
     });
   });
 
@@ -390,7 +572,7 @@ describe('HermesBackend', () => {
       await backend.stopRun(mockWorkflow);
 
       // --profile goes before subcommand
-      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow-agent-1', 'gateway', 'stop']);
+      expectExecCall(mockExecFile, 'hermes', ['--profile', 'test-workflow_agent-1', 'gateway', 'stop']);
     });
 
     it('should not fail if gateway is not running', async () => {
@@ -399,6 +581,17 @@ describe('HermesBackend', () => {
 
       // Should not throw
       await expect(backend.stopRun(mockWorkflow)).resolves.not.toThrow();
+    });
+
+    it('should log warnings on stop failure', async () => {
+      mockExecFile.mockRejectedValue(new Error('gateway not running'));
+
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await backend.stopRun(mockWorkflow);
+
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      consoleWarnSpy.mockRestore();
     });
   });
 });

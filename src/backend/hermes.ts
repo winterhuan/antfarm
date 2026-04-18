@@ -10,43 +10,102 @@ import { buildPollingPrompt } from '../installer/agent-cron.js';
 
 const exec = promisify(execFile);
 
+/**
+ * Get profile name using underscore separator to avoid namespace collisions.
+ * workflow=foo + agent=bar-baz => foo_bar-baz
+ * workflow=foo-bar + agent=baz => foo-bar_baz
+ * These are distinct unlike hyphen-only separation.
+ */
 export function getProfileName(workflowId: string, agentId: string): string {
-  return `${workflowId}-${agentId}`;
+  return `${workflowId}_${agentId}`;
+}
+
+interface AntfarmMarker {
+  workflowId: string;
+  version: number;
+  createdAt: string;
 }
 
 export class HermesBackend implements Backend {
+  private async getHermesProfilesDir(): Promise<string> {
+    // Try to get Hermes home from environment variable or use default
+    const hermesHome = process.env.HERMES_HOME || path.join(os.homedir(), '.hermes');
+    return path.join(hermesHome, 'profiles');
+  }
+
   async install(workflow: WorkflowSpec, sourceDir: string): Promise<void> {
+    const installed: Array<{ profileName: string; hasCron: boolean }> = [];
+
     for (const agent of workflow.agents) {
       const profileName = getProfileName(workflow.id, agent.id);
 
-      // Create Hermes profile
-      await this.createProfile(workflow.id, profileName);
+      try {
+        // Create Hermes profile
+        await this.createProfile(workflow.id, profileName);
 
-      // Create workspace
-      await this.createWorkspace(workflow.id, profileName, workflow, agent, sourceDir);
+        // Create workspace
+        await this.createWorkspace(workflow.id, profileName, workflow, agent, sourceDir);
 
-      // Configure profile
-      await this.configureProfile(profileName, agent);
+        // Configure profile (including role-based permissions)
+        await this.configureProfile(profileName, agent);
 
-      // Setup cron
-      await this.setupCron(profileName, workflow.id, agent.id);
+        // Setup cron (idempotent)
+        const hasCron = await this.setupCron(profileName, workflow.id, agent.id);
+
+        installed.push({ profileName, hasCron });
+      } catch (err) {
+        // Rollback: clean up what we've installed so far for this workflow
+        await this.rollbackInstall(workflow.id, installed);
+        throw err;
+      }
+    }
+  }
+
+  private async rollbackInstall(
+    workflowId: string,
+    installed: Array<{ profileName: string; hasCron: boolean }>
+  ): Promise<void> {
+    for (const { profileName, hasCron } of installed) {
+      try {
+        // Remove cron if added
+        if (hasCron) {
+          const cronName = `antfarm/${workflowId}/${profileName.split('_').pop()}`;
+          await exec('hermes', ['--profile', profileName, 'cron', 'remove', '--name', cronName]).catch(() => {});
+        }
+
+        // Stop gateway if running
+        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+
+        // Delete profile
+        await exec('hermes', ['--profile', profileName, 'profile', 'delete', '--yes']).catch(() => {});
+      } catch {
+        // Best effort rollback, ignore errors
+      }
     }
   }
 
   async uninstall(workflowId: string): Promise<void> {
-    // Hermes profiles are self-contained (workspace, config, cron all within profile).
-    // Unlike OpenClaw, no external coordination needed - delete profiles directly.
+    // Find profiles that belong to this workflow (verified via marker)
     const profiles = await this.listWorkflowProfiles(workflowId);
 
     for (const profileName of profiles) {
       try {
-        // Stop gateway if running (using array args, no shell injection)
-        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+        // Double-check ownership before deletion (defense in depth)
+        const isOwned = await this.verifyProfileOwnership(workflowId, profileName);
+        if (!isOwned) {
+          console.warn(`Skipping profile "${profileName}" - ownership verification failed`);
+          continue;
+        }
+
+        // Stop gateway if running
+        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch((err) => {
+          console.warn(`Failed to stop gateway for ${profileName}: ${err}`);
+        });
 
         // Delete profile
         await exec('hermes', ['--profile', profileName, 'profile', 'delete', '--yes']);
-      } catch {
-        // Profile may not exist, ignore errors
+      } catch (err) {
+        console.warn(`Failed to uninstall profile "${profileName}": ${err}`);
       }
     }
   }
@@ -70,8 +129,11 @@ export class HermesBackend implements Backend {
   async stopRun(workflow: WorkflowSpec): Promise<void> {
     for (const agent of workflow.agents) {
       const profileName = getProfileName(workflow.id, agent.id);
-      // Use array args to prevent shell injection; --profile goes before subcommand
-      await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+      try {
+        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']);
+      } catch (err) {
+        console.warn(`Failed to stop gateway for ${profileName}: ${err}`);
+      }
     }
   }
 
@@ -95,13 +157,18 @@ export class HermesBackend implements Backend {
     await exec('hermes', ['profile', 'create', profileName, '--clone', '--clone-from', 'default']);
 
     // Write marker immediately to mark profile as antfarm-owned before any further work
-    const workspaceDir = path.join(os.homedir(), '.hermes', 'profiles', profileName, 'workspace');
-    await fs.mkdir(workspaceDir, { recursive: true });
-    await fs.writeFile(path.join(workspaceDir, '.antfarm'), workflowId, 'utf-8');
+    const profilesDir = await this.getHermesProfilesDir();
+    const profileDir = path.join(profilesDir, profileName);
+    const marker: AntfarmMarker = {
+      workflowId,
+      version: 1,
+      createdAt: new Date().toISOString(),
+    };
+    await fs.writeFile(path.join(profileDir, '.antfarm'), JSON.stringify(marker), 'utf-8');
   }
 
   private async scanProfiles(filter: (name: string) => boolean): Promise<string[]> {
-    const profilesDir = path.join(os.homedir(), '.hermes', 'profiles');
+    const profilesDir = await this.getHermesProfilesDir();
     try {
       const entries = await fs.readdir(profilesDir, { withFileTypes: true });
       return entries
@@ -118,10 +185,11 @@ export class HermesBackend implements Backend {
   }
 
   private async listWorkflowProfiles(workflowId: string): Promise<string[]> {
-    const prefix = `${workflowId}-`;
+    // Use underscore prefix for new naming scheme
+    const prefix = `${workflowId}_`;
     // Find profiles that start with the workflow prefix and verify ownership via marker file
     const candidates = await this.scanProfiles((name) => name.startsWith(prefix) && name.length > prefix.length);
-    // Verify ownership to filter out profiles from other workflows (e.g., "test-workflow-2-*" when looking for "test-workflow-*")
+    // Verify ownership to filter out profiles from other workflows
     const ownershipChecks = candidates.map(async (profileName) => {
       const isOwned = await this.verifyProfileOwnership(workflowId, profileName);
       return isOwned ? profileName : null;
@@ -132,24 +200,23 @@ export class HermesBackend implements Backend {
 
   private async verifyProfileOwnership(workflowId: string, profileName: string): Promise<boolean> {
     try {
-      // Check if profile name follows our naming convention: {workflowId}-{agentId}
-      const expectedPrefix = `${workflowId}-`;
+      // Check if profile name follows our naming convention: {workflowId}_{agentId}
+      const expectedPrefix = `${workflowId}_`;
       if (!profileName.startsWith(expectedPrefix)) {
         return false;
       }
 
-      // Verify by checking if the profile's workspace has our marker
-      // Since marker is written immediately after profile creation, "marker missing" means
-      // "not owned by us" (either external profile or partial install from different workflow)
-      const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
-      const antfarmMarker = path.join(profileDir, 'workspace', '.antfarm');
+      // Verify by checking if the profile has our marker
+      const profilesDir = await this.getHermesProfilesDir();
+      const profileDir = path.join(profilesDir, profileName);
+      const antfarmMarker = path.join(profileDir, '.antfarm');
 
       try {
-        await fs.access(antfarmMarker);
         const markerContent = await fs.readFile(antfarmMarker, 'utf-8');
-        return markerContent.trim() === workflowId;
+        const marker: AntfarmMarker = JSON.parse(markerContent);
+        return marker.workflowId === workflowId;
       } catch {
-        // Marker doesn't exist or can't be read - not owned by us
+        // Marker doesn't exist, can't be read, or has wrong format - not owned by us
         return false;
       }
     } catch {
@@ -164,13 +231,11 @@ export class HermesBackend implements Backend {
     agent: WorkflowAgent,
     sourceDir: string
   ): Promise<void> {
-    const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
+    const profilesDir = await this.getHermesProfilesDir();
+    const profileDir = path.join(profilesDir, profileName);
     const workspaceDir = path.join(profileDir, 'workspace');
 
     await fs.mkdir(workspaceDir, { recursive: true });
-
-    // Note: .antfarm marker is already written by createProfile()
-    // We just ensure workspace files are copied here
 
     // Copy agent workspace files
     for (const [fileName, relativePath] of Object.entries(agent.workspace.files)) {
@@ -181,28 +246,46 @@ export class HermesBackend implements Backend {
   }
 
   private async configureProfile(profileName: string, agent: WorkflowAgent): Promise<void> {
-    // Use hermes CLI to set config values (preserves cloned settings)
-    // --profile goes before the subcommand
-    const model = agent.model || 'anthropic/claude-sonnet-4';
+    // Use 'default' model to let Hermes backend decide (matches OpenClaw behavior)
+    const model = agent.model ?? 'default';
     await exec('hermes', ['--profile', profileName, 'config', 'set', 'model.model', model]);
 
-    // Set timeout
-    const timeoutSeconds = String(agent.timeoutSeconds || 1800);
+    // Set timeout - use ?? to preserve 0 as valid value
+    const timeoutSeconds = String(agent.timeoutSeconds ?? 1800);
     await exec('hermes', ['--profile', profileName, 'config', 'set', 'timeout.seconds', timeoutSeconds]);
 
     // Set workspace path using the actual profile workspace directory
-    const profileDir = path.join(os.homedir(), '.hermes', 'profiles', profileName);
+    const profilesDir = await this.getHermesProfilesDir();
+    const profileDir = path.join(profilesDir, profileName);
     const workspaceDir = path.join(profileDir, 'workspace');
     await exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.cwd', workspaceDir]);
     await exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.backend', 'local']);
+
+    // Install workspace skills if specified
+    if (agent.workspace.skills && agent.workspace.skills.length > 0) {
+      for (const skill of agent.workspace.skills) {
+        await exec('hermes', ['--profile', profileName, 'skills', 'install', skill, '--yes']);
+      }
+    }
   }
 
-  private async setupCron(profileName: string, workflowId: string, agentId: string): Promise<void> {
+  private async setupCron(profileName: string, workflowId: string, agentId: string): Promise<boolean> {
     const prompt = buildPollingPrompt(workflowId, agentId);
     const cronName = `antfarm/${workflowId}/${agentId}`;
 
-    // Use hermes cron add CLI instead of writing files directly
-    // --profile goes before the subcommand
+    // Check if cron already exists by listing (idempotency)
+    // Hermes output format: "No scheduled jobs." or list of jobs
+    try {
+      const { stdout } = await exec('hermes', ['--profile', profileName, 'cron', 'list']);
+      if (stdout.includes(cronName)) {
+        // Cron already exists, skip
+        return false;
+      }
+    } catch {
+      // If we can't list crons, proceed to try adding
+    }
+
+    // Use hermes cron add CLI
     await exec('hermes', [
       '--profile', profileName,
       'cron', 'add',
@@ -210,5 +293,7 @@ export class HermesBackend implements Backend {
       '--every', '5m',
       '--prompt', prompt,
     ]);
+
+    return true;
   }
 }
