@@ -1,6 +1,6 @@
 import type { WorkflowSpec } from '../installer/types.js';
 
-export type BackendType = 'openclaw' | 'hermes';
+export type BackendType = 'openclaw' | 'hermes' | 'claude-code';
 
 export interface Backend {
   /** Install a workflow (create agents/workspaces) */

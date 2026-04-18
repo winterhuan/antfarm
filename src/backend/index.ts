@@ -8,6 +8,8 @@ export function createBackend(type: BackendType): Backend {
       return new OpenClawBackend();
     case 'hermes':
       return new HermesBackend();
+    case 'claude-code':
+      throw new Error("ClaudeCodeBackend not yet implemented — pending task 6");
     default:
       throw new Error(`Unknown backend type: ${type}`);
   }
