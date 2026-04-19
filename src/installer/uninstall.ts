@@ -12,7 +12,7 @@ import {
   resolveWorkflowRoot,
 } from "./paths.js";
 import { removeSubagentAllowlist } from "./subagent-allowlist.js";
-import { uninstallAntfarmSkill, uninstallAntfarmSkillForHermes, uninstallAntfarmSkillForClaudeCode } from "./skill-install.js";
+import { uninstallAntfarmSkill, uninstallAntfarmSkillForHermes, uninstallAntfarmSkillForClaudeCode, uninstallAntfarmSkillForCodex } from "./skill-install.js";
 import { removeAgentCrons } from "./agent-cron.js";
 import { deleteAgentCronJobs } from "./gateway-api.js";
 import { getDb } from "../db.js";
@@ -21,6 +21,7 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import { HermesBackend } from "../backend/hermes.js";
 import { ClaudeCodeBackend } from "../backend/claude-code.js";
+import { CodexBackend } from "../backend/codex.js";
 import type { BackendType } from "../backend/interface.js";
 import type { WorkflowInstallResult } from "./types.js";
 
@@ -260,6 +261,19 @@ export async function uninstallAllWorkflows(): Promise<void> {
     }
   }
   await uninstallAntfarmSkillForClaudeCode(process.cwd());
+
+  // Codex backend cleanup: for each installed workflow, remove overlay TOMLs
+  // and antfarm-managed entries from ~/.codex/config.toml. Then remove the
+  // antfarm-workflows skill from ~/.codex/skills/ once no workflows remain.
+  const codex = new CodexBackend();
+  for (const wfId of installedWorkflowIds) {
+    try {
+      await codex.uninstall(wfId);
+    } catch (err) {
+      console.warn(`Failed to uninstall Codex artifacts for workflow "${wfId}":`, err);
+    }
+  }
+  await uninstallAntfarmSkillForCodex();
 
   const removedAgents = selectAntfarmManagedAgents(list, installedWorkflowIds);
   if (config.agents) {
