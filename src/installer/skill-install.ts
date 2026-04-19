@@ -152,3 +152,30 @@ export async function uninstallAntfarmSkillForClaudeCode(projectDir: string): Pr
     // Already gone
   }
 }
+
+/**
+ * Codex scans `$CODEX_HOME/skills/<skill-name>/SKILL.md` (defaults to
+ * `~/.codex/skills/`). Global per-user, same pattern as Hermes.
+ */
+function getCodexUserSkillsDir(): string {
+  const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+  return path.join(codexHome, "skills");
+}
+
+export async function installAntfarmSkillForCodex(): Promise<{ installed: boolean; path: string }> {
+  const cli = `node ${resolveAntfarmCli()}`;
+  const forceTrigger = `To skip the scheduled polling wait, run \`${cli} workflow tick <agent-id>\` (once the Codex backend scheduler is implemented; pending follow-up plan). You may also invoke the antfarm subagent interactively from the Codex main agent: use the \`spawn\` tool with \`agent_type="antfarm-<workflow-id>-<agent-id>"\`.`;
+  return writeAntfarmSkill(getCodexUserSkillsDir(), {
+    antfarmCli: cli,
+    forceTriggerSection: forceTrigger,
+  });
+}
+
+export async function uninstallAntfarmSkillForCodex(): Promise<void> {
+  const destDir = path.join(getCodexUserSkillsDir(), "antfarm-workflows");
+  try {
+    await fs.rm(destDir, { recursive: true, force: true });
+  } catch {
+    // Already gone
+  }
+}
