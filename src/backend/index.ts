@@ -2,6 +2,7 @@ import type { Backend, BackendType } from './interface.js';
 import { OpenClawBackend } from './openclaw.js';
 import { HermesBackend } from './hermes.js';
 import { ClaudeCodeBackend } from './claude-code.js';
+import { CodexBackend } from './codex.js';
 
 export function createBackend(type: BackendType): Backend {
   switch (type) {
@@ -12,7 +13,7 @@ export function createBackend(type: BackendType): Backend {
     case 'claude-code':
       return new ClaudeCodeBackend();
     case 'codex':
-      throw new Error("CodexBackend not yet implemented — pending task 6");
+      return new CodexBackend();
     default:
       throw new Error(`Unknown backend type: ${type}`);
   }
