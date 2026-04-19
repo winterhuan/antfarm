@@ -6,9 +6,6 @@ import os from 'node:os';
 import {
   writeSubagentDefinition,
   removeSubagentDefinition,
-  upsertClaudeSettingsPermissions,
-  removeClaudeSettingsPermissions,
-  ANTFARM_PERMISSION_BLOCK_KEY,
 } from './claude-code-install.js';
 
 let tmp: string;
@@ -36,6 +33,29 @@ describe('writeSubagentDefinition', () => {
     assert.match(content, /role: coding/);
   });
 
+  it('omits disallowedTools when not provided (coding role)', async () => {
+    const dir = path.join(tmp, 'sub-test-1b');
+    await writeSubagentDefinition({
+      projectDir: dir, workflowId: 'wf', agentId: 'coder', role: 'coding', description: 'x',
+    });
+    const content = await fs.readFile(path.join(dir, '.claude/agents/wf_coder.md'), 'utf-8');
+    assert.doesNotMatch(content, /disallowedTools:/);
+  });
+
+  it('writes disallowedTools into frontmatter when provided', async () => {
+    const dir = path.join(tmp, 'sub-test-1c');
+    await writeSubagentDefinition({
+      projectDir: dir,
+      workflowId: 'wf',
+      agentId: 'planner',
+      role: 'analysis',
+      description: 'Plans work',
+      disallowedTools: 'Write,Edit,MultiEdit,NotebookEdit',
+    });
+    const content = await fs.readFile(path.join(dir, '.claude/agents/wf_planner.md'), 'utf-8');
+    assert.match(content, /disallowedTools: Write,Edit,MultiEdit,NotebookEdit/);
+  });
+
   it('is idempotent: overwrites existing definition', async () => {
     const dir = path.join(tmp, 'sub-test-2');
     const args = { projectDir: dir, workflowId: 'wf', agentId: 'a', role: 'coding' as const, description: 'v1' };
@@ -50,6 +70,16 @@ describe('writeSubagentDefinition', () => {
     await assert.rejects(
       writeSubagentDefinition({
         projectDir: tmp, workflowId: 'wf', agentId: '../evil',
+        role: 'coding', description: 'x',
+      }),
+      /unsafe/i,
+    );
+  });
+
+  it('rejects agent ids containing double quotes', async () => {
+    await assert.rejects(
+      writeSubagentDefinition({
+        projectDir: tmp, workflowId: 'wf', agentId: 'ev"il',
         role: 'coding', description: 'x',
       }),
       /unsafe/i,
@@ -72,63 +102,5 @@ describe('removeSubagentDefinition', () => {
     await fs.mkdir(path.join(dir, '.claude/agents'), { recursive: true });
     await removeSubagentDefinition({ projectDir: dir, workflowId: 'wf', agentId: 'ghost' });
     // Should not throw
-  });
-});
-
-describe('upsertClaudeSettingsPermissions', () => {
-  it('creates settings.json with an antfarm-marked deny block', async () => {
-    const dir = path.join(tmp, 'set-test-1');
-    await upsertClaudeSettingsPermissions({
-      projectDir: dir,
-      deny: ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'],
-    });
-    const raw = await fs.readFile(path.join(dir, '.claude/settings.json'), 'utf-8');
-    const json = JSON.parse(raw);
-    assert.deepEqual(
-      json.permissions.deny.slice().sort(),
-      ['Edit', 'MultiEdit', 'NotebookEdit', 'Write'],
-    );
-    assert.ok(json[ANTFARM_PERMISSION_BLOCK_KEY], 'antfarm marker should be present');
-  });
-
-  it('preserves user-added permissions when merging', async () => {
-    const dir = path.join(tmp, 'set-test-2');
-    await fs.mkdir(path.join(dir, '.claude'), { recursive: true });
-    await fs.writeFile(
-      path.join(dir, '.claude/settings.json'),
-      JSON.stringify({ permissions: { allow: ['Bash(git *)'], deny: ['UserCustomDeny'] } }),
-      'utf-8',
-    );
-    await upsertClaudeSettingsPermissions({ projectDir: dir, deny: ['Write'] });
-    const json = JSON.parse(await fs.readFile(path.join(dir, '.claude/settings.json'), 'utf-8'));
-    assert.deepEqual(json.permissions.allow, ['Bash(git *)']);
-    assert.ok(json.permissions.deny.includes('UserCustomDeny'));
-    assert.ok(json.permissions.deny.includes('Write'));
-  });
-
-  it('is idempotent: re-running with same deny does not duplicate', async () => {
-    const dir = path.join(tmp, 'set-test-3');
-    await upsertClaudeSettingsPermissions({ projectDir: dir, deny: ['Write'] });
-    await upsertClaudeSettingsPermissions({ projectDir: dir, deny: ['Write'] });
-    const json = JSON.parse(await fs.readFile(path.join(dir, '.claude/settings.json'), 'utf-8'));
-    const writes = json.permissions.deny.filter((d: string) => d === 'Write');
-    assert.equal(writes.length, 1);
-  });
-});
-
-describe('removeClaudeSettingsPermissions', () => {
-  it('removes only the entries it previously added (via marker block)', async () => {
-    const dir = path.join(tmp, 'set-test-4');
-    await fs.mkdir(path.join(dir, '.claude'), { recursive: true });
-    await fs.writeFile(
-      path.join(dir, '.claude/settings.json'),
-      JSON.stringify({ permissions: { deny: ['UserCustomDeny'] } }),
-      'utf-8',
-    );
-    await upsertClaudeSettingsPermissions({ projectDir: dir, deny: ['Write', 'Edit'] });
-    await removeClaudeSettingsPermissions({ projectDir: dir });
-    const json = JSON.parse(await fs.readFile(path.join(dir, '.claude/settings.json'), 'utf-8'));
-    assert.deepEqual(json.permissions.deny, ['UserCustomDeny']);
-    assert.equal(json[ANTFARM_PERMISSION_BLOCK_KEY], undefined);
   });
 });

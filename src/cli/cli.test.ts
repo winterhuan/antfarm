@@ -68,3 +68,32 @@ describe("workflow stop CLI", () => {
     }
   });
 });
+
+describe("workflow tick CLI", () => {
+  it("help text includes 'workflow tick' command", () => {
+    let output: string;
+    try {
+      output = execFileSync("node", [cliPath], { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    } catch (err: any) {
+      output = (err.stdout ?? "") + (err.stderr ?? "");
+    }
+    assert.ok(output.includes("workflow tick"), "Help text should include 'workflow tick'");
+    assert.ok(output.includes("Claude/Codex agent"), "Help text should describe workflow tick");
+  });
+
+  it("'workflow tick' with no agent-id prints error and exits with code 1", () => {
+    try {
+      execFileSync("node", [cliPath, "workflow", "tick"], {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      assert.fail("Should have exited with code 1");
+    } catch (err: any) {
+      assert.equal(err.status, 1, "Should exit with code 1");
+      assert.ok(
+        (err.stderr ?? "").includes("Missing agent-id"),
+        "Should print 'Missing agent-id' to stderr",
+      );
+    }
+  });
+});

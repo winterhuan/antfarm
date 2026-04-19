@@ -1,9 +1,12 @@
-import { describe, it, afterEach } from "node:test";
+import { describe, it, before, after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { getDb } from "../db.js";
 import { stopWorkflow } from "./status.js";
-import type { StopWorkflowResult } from "./status.js";
+import type { WorkflowSpec } from "./types.js";
 
 // Helper to create a test run with steps
 function createTestRun(opts: {
@@ -47,6 +50,49 @@ function cleanupTestRun(runId: string) {
 
 describe("stopWorkflow", () => {
   const testRunIds: string[] = [];
+  let tmpDir: string;
+  let originalDbPath: string | undefined;
+
+  const stopDeps = {
+    loadWorkflow: async (workflowId: string): Promise<WorkflowSpec> => ({
+      id: workflowId,
+      agents: [
+        {
+          id: "test-agent",
+          workspace: { baseDir: "test-agent", files: {} },
+        },
+      ],
+      steps: [
+        {
+          id: "plan",
+          agent: "test-agent",
+          input: "x",
+          expects: "y",
+        },
+      ],
+    }),
+    groupAgentsByBackend: async (workflow: WorkflowSpec) =>
+      new Map([["openclaw" as const, workflow.agents]]),
+    createBackend: () => ({
+      install: async () => {},
+      uninstall: async () => {},
+      startRun: async () => {},
+      stopRun: async () => {},
+    }),
+    emitEvent: () => {},
+  };
+
+  before(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "antfarm-status-test-"));
+    originalDbPath = process.env.ANTFARM_DB_PATH;
+    process.env.ANTFARM_DB_PATH = path.join(tmpDir, "antfarm.db");
+  });
+
+  after(async () => {
+    if (originalDbPath === undefined) delete process.env.ANTFARM_DB_PATH;
+    else process.env.ANTFARM_DB_PATH = originalDbPath;
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 
   afterEach(() => {
     for (const id of testRunIds) {
@@ -70,7 +116,7 @@ describe("stopWorkflow", () => {
       ],
     });
 
-    const result = await stopWorkflow(runId);
+    const result = await stopWorkflow(runId, stopDeps);
     assert.equal(result.status, "ok");
     if (result.status !== "ok") return; // narrow type
     assert.equal(result.runId, runId);
@@ -97,7 +143,10 @@ describe("stopWorkflow", () => {
     const result = await stopWorkflow("nonexistent-run-id-12345");
     assert.equal(result.status, "not_found");
     if (result.status !== "not_found") return;
-    assert.ok(result.message.includes("nonexistent-run-id-12345"));
+    assert.equal(
+      result.message,
+      'No run matching "nonexistent-run-id-12345". No workflow runs found.',
+    );
   });
 
   it("returns already_done for an already completed run", async () => {
@@ -110,7 +159,7 @@ describe("stopWorkflow", () => {
       steps: [{ stepId: "plan", status: "done" }],
     });
 
-    const result = await stopWorkflow(runId);
+    const result = await stopWorkflow(runId, stopDeps);
     assert.equal(result.status, "already_done");
     if (result.status !== "already_done") return;
     assert.ok(result.message.includes("completed"));
@@ -126,7 +175,7 @@ describe("stopWorkflow", () => {
       steps: [{ stepId: "plan", status: "failed" }],
     });
 
-    const result = await stopWorkflow(runId);
+    const result = await stopWorkflow(runId, stopDeps);
     assert.equal(result.status, "already_done");
     if (result.status !== "already_done") return;
     assert.ok(result.message.includes("cancelled"));
@@ -143,7 +192,7 @@ describe("stopWorkflow", () => {
     });
 
     const prefix = runId.slice(0, 8);
-    const result = await stopWorkflow(prefix);
+    const result = await stopWorkflow(prefix, stopDeps);
     assert.equal(result.status, "ok");
     if (result.status !== "ok") return;
     assert.equal(result.runId, runId);
@@ -164,7 +213,7 @@ describe("stopWorkflow", () => {
       ],
     });
 
-    const result = await stopWorkflow(runId);
+    const result = await stopWorkflow(runId, stopDeps);
     assert.equal(result.status, "ok");
     if (result.status !== "ok") return;
     assert.equal(result.cancelledSteps, 1); // only the running step

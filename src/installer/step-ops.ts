@@ -685,9 +685,9 @@ export function completeStep(stepId: string, output: string): { advanced: boolea
 
   if (!step) throw new Error(`Step not found: ${stepId}`);
 
-  // Guard: don't process completions for failed runs
+  // Guard: don't process completions for failed/cancelled runs
   const runCheck = db.prepare("SELECT status FROM runs WHERE id = ?").get(step.run_id) as { status: string } | undefined;
-  if (runCheck?.status === "failed") {
+  if (runCheck?.status === "failed" || runCheck?.status === "cancelled") {
     return { advanced: false, runCompleted: false };
   }
 

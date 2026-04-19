@@ -84,17 +84,21 @@ What this means in practice:
 
 Do NOT re-open this investigation assuming we missed a config. We didn't. If Hermes gains per-tool deny-list support upstream, that's the time to revisit.
 
-## Claude Code Backend (phase 1: install/uninstall only)
+## Claude Code Backend
 
 The Claude Code backend writes workflow configuration into the **project's** `.claude/` directory (the repo where `antfarm workflow install` is run) rather than a per-agent profile. Artifacts:
 
-- `.claude/agents/<workflowId>_<agentId>.md` — subagent definition per workflow agent. Users can invoke these interactively via Claude Code's Agent tool. **Antfarm does not yet drive them autonomously** — the scheduler is a follow-up.
-- `.claude/settings.json` `permissions.deny` — union of role-based deny lists (Write/Edit/MultiEdit/NotebookEdit for read-only roles). Tracked under the `_antfarmManagedDeny` key so `uninstall` removes only antfarm-added entries.
+- `.claude/agents/<workflowId>_<agentId>.md` — subagent definition per workflow agent. Per-role `disallowedTools` lives in the frontmatter so Claude Code enforces the deny list per-subagent on interactive Task-tool delegation. No global `.claude/settings.json` mutation — a mixed-role workflow would over-restrict coding agents if we unioned denies into the project-wide settings.
 - `.claude/skills/antfarm-workflows/SKILL.md` — main-agent entry point for interactive use (parallels OpenClaw / Hermes skill install).
+- `<workflowDir>/.claude-project-dir` — install-time marker recording the project dir that owns these artifacts. `uninstallAllWorkflows` (and single-workflow uninstall from a different cwd) reads it to target the correct `.claude/`. Falls back to `process.cwd()` for legacy installs without the marker.
 
-`startRun` / `stopRun` are intentional no-ops. To advance a workflow on the Claude Code backend, use `antfarm workflow tick <agent-id>` (once the follow-up plan ships the scheduler) or invoke the subagent interactively.
+`startRun` / `stopRun` are no-ops. The antfarm **built-in scheduler** (`src/server/subprocess-scheduler.ts`, started by the dashboard daemon) polls the DB for pending steps and spawns `claude -p` subprocesses directly — nothing per-backend to start/stop. Users can also run `antfarm workflow tick <agent-id>` for a one-shot pass.
 
-**Permission model vs Hermes:** Claude Code supports per-tool deny at the CLI flag level (`--disallowedTools "Write,Edit,..."`) and at the settings.json level. Both are used: settings as the persistent default, CLI flag as the per-spawn override. This is real enforcement — PoC verified that Claude actively attempts workarounds (`printf >`, `tee`, `cd + relative`) and all are blocked.
+**Permission model vs Hermes:** Claude Code supports per-tool deny at the CLI flag level (`--disallowedTools "Write,Edit,..."`) and via per-subagent frontmatter. Both are used:
+- **Autonomous path** (SubprocessScheduler → `claude -p <prompt>`): CLI flag `--disallowedTools` per-agent (see `claude-code-spawn.ts`). The `claude -p` path does not resolve a named subagent file, so the frontmatter doesn't apply here.
+- **Interactive path** (main Claude Code agent → Task tool → antfarm subagent): `.claude/agents/<name>.md` frontmatter `disallowedTools` applies, scoped to that one subagent.
+
+Both are real enforcement — PoC verified that Claude actively attempts workarounds (`printf >`, `tee`, `cd + relative`) and all are blocked.
 
 **Required CLI flags for non-interactive use (from PoC):**
 - `--permission-mode bypassPermissions` — MANDATORY. Without this, every Bash call returns "requires approval" and the `-p` session fails silently.
@@ -102,7 +106,7 @@ The Claude Code backend writes workflow configuration into the **project's** `.c
 - `--bare` — skips CLAUDE.md auto-discovery / hooks / plugin sync for cheaper, context-isolated runs (~$0.06/turn on Opus-4.7-1M vs $0.15 without `--bare`).
 - `--max-budget-usd <n>` — post-hoc circuit breaker, not pre-check. Allows ~3× overshoot before tripping.
 
-## Codex Backend (phase 1: install/uninstall only)
+## Codex Backend
 
 The Codex backend writes workflow configuration to the user's **global** `~/.codex/` directory (same ergonomic choice as Hermes — Codex is designed around per-user state, not per-project). Artifacts:
 
@@ -114,7 +118,7 @@ The Codex backend writes workflow configuration to the user's **global** `~/.cod
 
 **config.toml management:** No TOML parser dependency. The antfarm-managed block at file end is identified by marker comments. Install rewrites the block in place; uninstall filters entries by `antfarm-<workflowId>-` prefix. User's hand-edited sections (outside the block) are never touched.
 
-**`startRun` / `stopRun` are intentional no-ops** — shared scheduler is a follow-up with Claude Code. Interactively, users can already invoke workflow agents via Codex main agent's `spawn(message=..., agent_type="antfarm-<wf>-<agent>")`.
+**`startRun` / `stopRun` are no-ops** — driven by the same built-in SubprocessScheduler as Claude Code (see above). Interactively, users can also invoke workflow agents via Codex main agent's `spawn(message=..., agent_type="antfarm-<wf>-<agent>")`.
 
 **Canonical spawn (scheduler, phase 2):**
 

@@ -11,7 +11,7 @@
 **Design Doc:** [2026-04-18-claude-code-backend-design.md](../specs/2026-04-18-claude-code-backend-design.md)
 
 **Test conventions (discovered from repo):**
-- Framework: `node:test` + `node:assert/strict` (NOT vitest — `tests/backend/*.test.ts` files use vitest but vitest is not installed; those tests don't run)
+- Framework: `node:test` + `node:assert/strict`
 - Test files live co-located as `src/<path>/<name>.test.ts`, following `src/installer/status.test.ts` / `src/installer/uninstall.test.ts` precedent
 - Run: `npm run build && node --test dist/<path>/<name>.test.js`
 

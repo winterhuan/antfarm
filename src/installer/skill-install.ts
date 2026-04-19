@@ -134,7 +134,7 @@ function getClaudeCodeProjectSkillsDir(projectDir: string): string {
  */
 export async function installAntfarmSkillForClaudeCode(projectDir: string): Promise<{ installed: boolean; path: string }> {
   const cli = `node ${resolveAntfarmCli()}`;
-  const forceTrigger = `To skip the scheduled polling wait, run \`${cli} workflow tick <agent-id>\` (once the Claude Code backend scheduler is implemented; pending follow-up plan).`;
+  const forceTrigger = `To force a one-shot scheduler pass immediately, run \`${cli} workflow tick <workflow-id>_<agent-id>\`.`;
   return writeAntfarmSkill(getClaudeCodeProjectSkillsDir(projectDir), {
     antfarmCli: cli,
     forceTriggerSection: forceTrigger,
@@ -164,7 +164,7 @@ function getCodexUserSkillsDir(): string {
 
 export async function installAntfarmSkillForCodex(): Promise<{ installed: boolean; path: string }> {
   const cli = `node ${resolveAntfarmCli()}`;
-  const forceTrigger = `To skip the scheduled polling wait, run \`${cli} workflow tick <agent-id>\` (once the Codex backend scheduler is implemented; pending follow-up plan). You may also invoke the antfarm subagent interactively from the Codex main agent: use the \`spawn\` tool with \`agent_type="antfarm-<workflow-id>-<agent-id>"\`.`;
+  const forceTrigger = `To force a one-shot scheduler pass immediately, run \`${cli} workflow tick <workflow-id>_<agent-id>\`. You may also invoke the antfarm subagent interactively from the Codex main agent: use the \`spawn\` tool with \`agent_type="antfarm-<workflow-id>-<agent-id>"\`.`;
   return writeAntfarmSkill(getCodexUserSkillsDir(), {
     antfarmCli: cli,
     forceTriggerSection: forceTrigger,

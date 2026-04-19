@@ -4,6 +4,7 @@ import os from 'node:os';
 
 import type { Backend } from './interface.js';
 import type { WorkflowSpec } from '../installer/types.js';
+import { provisionAgents } from '../installer/agent-provision.js';
 import {
   writeRoleOverlayFile,
   removeRoleOverlayFiles,
@@ -26,6 +27,10 @@ import {
 const DEFAULT_MODEL = 'gpt-5.3-codex';
 const DEFAULT_REASONING: 'low' | 'medium' | 'high' = 'high';
 
+export function getCodexProfileName(workflowId: string, agentId: string): string {
+  return `antfarm-${workflowId}-${agentId}`;
+}
+
 export class CodexBackend implements Backend {
   private getCodexHome(): string {
     return process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
@@ -47,14 +52,20 @@ export class CodexBackend implements Backend {
   }
 
   private profileName(workflowId: string, agentId: string): string {
-    return `antfarm-${workflowId}-${agentId}`;
+    return getCodexProfileName(workflowId, agentId);
   }
 
   private overlayPath(workflowId: string, agentId: string): string {
     return path.join(this.getAgentsDir(), `${this.profileName(workflowId, agentId)}.toml`);
   }
 
-  async install(workflow: WorkflowSpec, _sourceDir: string): Promise<void> {
+  async install(workflow: WorkflowSpec, sourceDir: string): Promise<void> {
+    await provisionAgents({
+      workflow,
+      workflowDir: sourceDir,
+      bundledSourceDir: sourceDir,
+    });
+
     const skillResult = await installAntfarmSkillForCodex();
     if (!skillResult.installed) {
       console.warn(

@@ -39,10 +39,23 @@ function makeWorkflow(id = 'demo'): WorkflowSpec {
   };
 }
 
+async function seedBootstrapFiles(dir: string): Promise<void> {
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, 'bootstrap.md'), '# bootstrap\n', 'utf-8');
+}
+
+function applyBootstrapFiles(workflow: WorkflowSpec): WorkflowSpec {
+  for (const agent of workflow.agents) {
+    agent.workspace.files = { 'AGENTS.md': 'bootstrap.md' };
+  }
+  return workflow;
+}
+
 describe('CodexBackend.install', () => {
   it('writes one role overlay TOML per agent', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const entries = (await fs.readdir(path.join(tmp, 'agents'))).sort();
     assert.deepEqual(entries, [
       'antfarm-demo-coder.toml',
@@ -53,7 +66,8 @@ describe('CodexBackend.install', () => {
 
   it('each overlay has correct sandbox_mode per role', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const verifier = await fs.readFile(path.join(tmp, 'agents/antfarm-demo-verifier.toml'), 'utf-8');
     assert.match(verifier, /sandbox_mode = "read-only"/);
     const coder = await fs.readFile(path.join(tmp, 'agents/antfarm-demo-coder.toml'), 'utf-8');
@@ -64,7 +78,8 @@ describe('CodexBackend.install', () => {
 
   it('config.toml contains profiles + agent_roles entries inside antfarm block', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8');
     assert.match(cfg, new RegExp(ANTFARM_BLOCK_BEGIN));
     assert.match(cfg, /\[profiles\."antfarm-demo-planner"\]/);
@@ -77,7 +92,8 @@ describe('CodexBackend.install', () => {
 
   it('installs antfarm-workflows skill globally', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     await fs.access(path.join(tmp, 'skills/antfarm-workflows/SKILL.md'));
   });
 
@@ -85,7 +101,8 @@ describe('CodexBackend.install', () => {
     await fs.mkdir(tmp, { recursive: true });
     await fs.writeFile(path.join(tmp, 'config.toml'), '[user]\nkey = "value"\n', 'utf-8');
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8');
     assert.match(cfg, /\[user\]/);
     assert.match(cfg, /key = "value"/);
@@ -94,8 +111,9 @@ describe('CodexBackend.install', () => {
 
   it('is idempotent: re-install replaces the block without duplicating', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow(), tmp);
-    await be.install(makeWorkflow(), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8');
     const blocks = (cfg.match(new RegExp(ANTFARM_BLOCK_BEGIN, 'g')) ?? []).length;
     assert.equal(blocks, 1);
@@ -105,8 +123,9 @@ describe('CodexBackend.install', () => {
 describe('CodexBackend.uninstall', () => {
   it('removes overlay TOMLs and config.toml entries for the specified workflow only', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow('alpha'), tmp);
-    await be.install(makeWorkflow('beta'), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow('alpha')), tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow('beta')), tmp);
 
     await be.uninstall('alpha');
 
@@ -121,7 +140,8 @@ describe('CodexBackend.uninstall', () => {
 
   it('removes the whole antfarm block + skill when last workflow is uninstalled', async () => {
     const be = new CodexBackend();
-    await be.install(makeWorkflow('only'), tmp);
+    await seedBootstrapFiles(tmp);
+    await be.install(applyBootstrapFiles(makeWorkflow('only')), tmp);
     await be.uninstall('only');
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8').catch(() => '');
     assert.doesNotMatch(cfg, new RegExp(ANTFARM_BLOCK_BEGIN));

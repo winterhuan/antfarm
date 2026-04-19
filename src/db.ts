@@ -1,22 +1,28 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-
-const DB_DIR = path.join(os.homedir(), ".openclaw", "antfarm");
-const DB_PATH = path.join(DB_DIR, "antfarm.db");
+import { resolveAntfarmRoot } from "./installer/paths.js";
 
 let _db: DatabaseSync | null = null;
+let _dbPath: string | null = null;
 let _dbOpenedAt = 0;
 const DB_MAX_AGE_MS = 5000;
 
+function resolveDbPath(): string {
+  const explicit = process.env.ANTFARM_DB_PATH?.trim();
+  if (explicit) return explicit;
+  return path.join(resolveAntfarmRoot(), "antfarm.db");
+}
+
 export function getDb(): DatabaseSync {
   const now = Date.now();
-  if (_db && (now - _dbOpenedAt) < DB_MAX_AGE_MS) return _db;
+  const dbPath = resolveDbPath();
+  if (_db && _dbPath === dbPath && (now - _dbOpenedAt) < DB_MAX_AGE_MS) return _db;
   if (_db) { try { _db.close(); } catch {} }
 
-  fs.mkdirSync(DB_DIR, { recursive: true });
-  _db = new DatabaseSync(DB_PATH);
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  _db = new DatabaseSync(dbPath);
+  _dbPath = dbPath;
   _dbOpenedAt = now;
   _db.exec("PRAGMA journal_mode=WAL");
   _db.exec("PRAGMA foreign_keys=ON");
@@ -110,5 +116,5 @@ export function nextRunNumber(): number {
 }
 
 export function getDbPath(): string {
-  return DB_PATH;
+  return resolveDbPath();
 }

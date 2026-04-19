@@ -10,7 +10,12 @@ import { buildPollingPrompt } from '../installer/agent-cron.js';
 import { installAntfarmSkillForHermes } from '../installer/skill-install.js';
 import { writeWorkflowFile } from '../installer/workspace-files.js';
 
-const exec = promisify(execFile);
+const defaultExec = promisify(execFile);
+
+type HermesExec = (
+  file: string,
+  args: string[],
+) => Promise<{ stdout: string; stderr: string }>;
 
 /**
  * Get profile name using underscore separator to avoid namespace collisions.
@@ -29,6 +34,8 @@ interface AntfarmMarker {
 }
 
 export class HermesBackend implements Backend {
+  constructor(private readonly exec: HermesExec = defaultExec as HermesExec) {}
+
   private async getHermesProfilesDir(): Promise<string> {
     // Try to get Hermes home from environment variable or use default
     const hermesHome = process.env.HERMES_HOME || path.join(os.homedir(), '.hermes');
@@ -81,7 +88,7 @@ export class HermesBackend implements Backend {
         await this.removeCronByName(profileName, cronName).catch(() => {});
       }
       // Note: install never starts the gateway, so we don't stop it here.
-      await exec('hermes', ['profile', 'delete', profileName, '-y']).catch(() => {});
+      await this.exec('hermes', ['profile', 'delete', profileName, '-y']).catch(() => {});
     }
   }
 
@@ -108,12 +115,12 @@ export class HermesBackend implements Backend {
         });
 
         // Stop gateway if running
-        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch((err) => {
-          console.warn(`Failed to stop gateway for ${profileName}: ${err}`);
-        });
+          await this.exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch((err) => {
+            console.warn(`Failed to stop gateway for ${profileName}: ${err}`);
+          });
 
         // Delete profile — name is positional for `profile delete`.
-        await exec('hermes', ['profile', 'delete', profileName, '-y']);
+        await this.exec('hermes', ['profile', 'delete', profileName, '-y']);
       } catch (err) {
         console.warn(`Failed to uninstall profile "${profileName}": ${err}`);
       }
@@ -125,12 +132,12 @@ export class HermesBackend implements Backend {
     try {
       for (const agent of workflow.agents) {
         const profileName = getProfileName(workflow.id, agent.id);
-        await exec('hermes', ['--profile', profileName, 'gateway', 'start']);
+        await this.exec('hermes', ['--profile', profileName, 'gateway', 'start']);
         started.push(profileName);
       }
     } catch (err) {
       for (const profileName of started) {
-        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+        await this.exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
       }
       throw err;
     }
@@ -140,7 +147,7 @@ export class HermesBackend implements Backend {
     for (const agent of workflow.agents) {
       const profileName = getProfileName(workflow.id, agent.id);
       try {
-        await exec('hermes', ['--profile', profileName, 'gateway', 'stop']);
+        await this.exec('hermes', ['--profile', profileName, 'gateway', 'stop']);
       } catch (err) {
         console.warn(`Failed to stop gateway for ${profileName}: ${err}`);
       }
@@ -183,7 +190,7 @@ export class HermesBackend implements Backend {
     }
 
     // Profile doesn't exist - create it
-    await exec('hermes', ['profile', 'create', profileName, '--clone', '--clone-from', 'default']);
+    await this.exec('hermes', ['profile', 'create', profileName, '--clone', '--clone-from', 'default']);
 
     // Write marker immediately to mark profile as antfarm-owned before any further work.
     // If marker write fails (disk full, permissions, process killed), roll back the profile
@@ -197,7 +204,7 @@ export class HermesBackend implements Backend {
     try {
       await fs.writeFile(path.join(profileDir, '.antfarm'), JSON.stringify(marker), 'utf-8');
     } catch (err) {
-      await exec('hermes', ['profile', 'delete', profileName, '-y']).catch(() => {});
+      await this.exec('hermes', ['profile', 'delete', profileName, '-y']).catch(() => {});
       throw new Error(
         `Failed to write antfarm ownership marker for profile "${profileName}". ` +
         `Profile was rolled back. Original error: ${err instanceof Error ? err.message : String(err)}`
@@ -309,18 +316,18 @@ export class HermesBackend implements Backend {
   private async configureProfile(profileName: string, agent: WorkflowAgent): Promise<void> {
     // Use 'default' model to let Hermes backend decide (matches OpenClaw behavior)
     const model = agent.model ?? 'default';
-    await exec('hermes', ['--profile', profileName, 'config', 'set', 'model.model', model]);
+    await this.exec('hermes', ['--profile', profileName, 'config', 'set', 'model.model', model]);
 
     // Set timeout - use ?? to preserve 0 as valid value
     const timeoutSeconds = String(agent.timeoutSeconds ?? 1800);
-    await exec('hermes', ['--profile', profileName, 'config', 'set', 'timeout.seconds', timeoutSeconds]);
+    await this.exec('hermes', ['--profile', profileName, 'config', 'set', 'timeout.seconds', timeoutSeconds]);
 
     // Set workspace path using the actual profile workspace directory
     const profilesDir = await this.getHermesProfilesDir();
     const profileDir = path.join(profilesDir, profileName);
     const workspaceDir = path.join(profileDir, 'workspace');
-    await exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.cwd', workspaceDir]);
-    await exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.backend', 'local']);
+    await this.exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.cwd', workspaceDir]);
+    await this.exec('hermes', ['--profile', profileName, 'config', 'set', 'terminal.backend', 'local']);
 
     // Install workspace skills if specified.
     // --yes skips confirmation; --force overrides security scanner blocks for
@@ -334,7 +341,7 @@ export class HermesBackend implements Backend {
         // match by the trailing slug since that's what `skills list` prints.
         const slug = skill.split('/').pop() ?? skill;
         if (installed.has(slug)) continue;
-        await exec('hermes', ['--profile', profileName, 'skills', 'install', skill, '--yes', '--force']);
+        await this.exec('hermes', ['--profile', profileName, 'skills', 'install', skill, '--yes', '--force']);
       }
     }
   }
@@ -346,7 +353,7 @@ export class HermesBackend implements Backend {
    */
   private async listInstalledSkillNames(profileName: string): Promise<Set<string>> {
     try {
-      const { stdout } = await exec('hermes', ['--profile', profileName, 'skills', 'list']);
+      const { stdout } = await this.exec('hermes', ['--profile', profileName, 'skills', 'list']);
       const names = new Set<string>();
       for (const line of stdout.split('\n')) {
         // Rows look like: │ <name> │ <category> │ <source> │ <trust> │
@@ -380,7 +387,7 @@ export class HermesBackend implements Backend {
     // Correct invocation: `hermes cron create <schedule> <prompt> --name <name>`
     // (schedule and prompt are positional — there are no `--every` / `--prompt` flags.
     // Also no `--timeout` — cron tasks inherit the profile's terminal.timeout.)
-    await exec('hermes', [
+    await this.exec('hermes', [
       '--profile', profileName,
       'cron', 'create',
       'every 5m',
@@ -405,7 +412,7 @@ export class HermesBackend implements Backend {
   private async findCronJobId(profileName: string, cronName: string): Promise<string | null> {
     let stdout = '';
     try {
-      ({ stdout } = await exec('hermes', ['--profile', profileName, 'cron', 'list']));
+      ({ stdout } = await this.exec('hermes', ['--profile', profileName, 'cron', 'list']));
     } catch {
       return null;
     }
@@ -432,6 +439,6 @@ export class HermesBackend implements Backend {
   private async removeCronByName(profileName: string, cronName: string): Promise<void> {
     const jobId = await this.findCronJobId(profileName, cronName);
     if (!jobId) return;
-    await exec('hermes', ['--profile', profileName, 'cron', 'remove', jobId]);
+    await this.exec('hermes', ['--profile', profileName, 'cron', 'remove', jobId]);
   }
 }

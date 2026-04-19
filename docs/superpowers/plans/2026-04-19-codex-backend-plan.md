@@ -11,7 +11,7 @@
 **Design Doc:** [2026-04-19-codex-backend-design.md](../specs/2026-04-19-codex-backend-design.md)
 
 **Test conventions (same as Claude Code plan):**
-- Framework: `node:test` + `node:assert/strict` (NOT vitest — `tests/backend/*.test.ts` files use vitest but vitest is not installed; those tests don't run)
+- Framework: `node:test` + `node:assert/strict`
 - Test files live co-located as `src/<path>/<name>.test.ts`
 - Build: `/Users/winter/.nvm/versions/node/v22.20.0/bin/npm run build`
 - Run: `node --test dist/<path>/<name>.test.js`

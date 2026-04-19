@@ -23,6 +23,7 @@ import { listBundledWorkflows } from "../installer/workflow-fetch.js";
 import { readRecentLogs } from "../lib/logger.js";
 import { getRecentEvents, getRunEvents, type AntfarmEvent } from "../installer/events.js";
 import { startDaemon, stopDaemon, getDaemonStatus, isRunning } from "../server/daemonctl.js";
+import { tickWorkflowAgent } from "../server/subprocess-scheduler.js";
 import { claimStep, completeStep, failStep, getStories, peekStep } from "../installer/step-ops.js";
 import { ensureCliSymlink } from "../installer/symlink.js";
 import { runMedicCheck, getMedicStatus, getRecentMedicChecks } from "../medic/medic.js";
@@ -120,11 +121,12 @@ function printUsage() {
       "",
       "antfarm workflow list                List available workflows",
       "antfarm workflow install <name>      Install a workflow",
-      "antfarm workflow install <name> --backend <openclaw|hermes>  Install with specific backend",
+      "antfarm workflow install <name> --backend <openclaw|hermes|claude-code|codex>  Install with specific backend",
       "antfarm workflow uninstall <name>    Uninstall a workflow (blocked if runs active)",
       "antfarm workflow uninstall --all     Uninstall all workflows (--force to override)",
       "antfarm workflow run <name> <task>   Start a workflow run",
-      "antfarm workflow run <name> <task> --backend <openclaw|hermes>  Run with specific backend",
+      "antfarm workflow run <name> <task> --backend <openclaw|hermes|claude-code|codex>  Run with specific backend",
+      "antfarm workflow tick <agent-id>     Run one scheduler pass for a Claude/Codex agent",
       "antfarm workflow status <query>      Check run status (task substring, run ID prefix)",
       "antfarm workflow runs                List all workflow runs",
       "antfarm workflow resume <run-id>     Resume a failed run from where it left off",
@@ -154,6 +156,16 @@ function printUsage() {
       "antfarm update                       Pull latest, rebuild, and reinstall workflows",
     ].join("\n") + "\n",
   );
+}
+
+async function ensureDashboardRunning(port = 3333): Promise<void> {
+  if (isRunning().running) return;
+  try {
+    const result = await startDaemon(port);
+    console.log(`Dashboard started (PID ${result.pid}): http://localhost:${result.port}`);
+  } catch (err) {
+    console.log(`Note: Could not start dashboard: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 async function main() {
@@ -494,6 +506,31 @@ async function main() {
     return;
   }
 
+  if (action === "tick") {
+    if (!target) { process.stderr.write("Missing agent-id.\n"); printUsage(); process.exit(1); }
+    const result = await tickWorkflowAgent(target);
+    if (result.status === "no_work") {
+      console.log(`No pending work for ${result.agentId}.`);
+      return;
+    }
+    if (result.status === "unsupported_backend") {
+      process.stderr.write(`workflow tick only supports claude-code/codex agents. ${result.agentId} uses ${result.backend}.\n`);
+      process.exit(1);
+    }
+    if (result.status === "launch_failed") {
+      process.stderr.write(`Tick failed for ${result.agentId}: ${result.error}\n`);
+      process.exit(1);
+    }
+
+    const exit = result.exitCode === null ? `signal ${result.signal ?? "unknown"}` : `exit ${result.exitCode}`;
+    if (result.reported) {
+      console.log(`Executed ${result.agentId} via ${result.backend} for step ${result.stepId.slice(0, 8)} (${exit}).`);
+    } else {
+      console.log(`Executed ${result.agentId} via ${result.backend} for step ${result.stepId.slice(0, 8)} (${exit}); subprocess exited without reporting, so the step was failed.`);
+    }
+    return;
+  }
+
   if (action === "list") {
     const workflows = await listBundledWorkflows();
     if (workflows.length === 0) { process.stdout.write("No workflows available.\n"); } else {
@@ -658,6 +695,7 @@ async function main() {
         }
 
         console.log(`Resumed run ${run.id.slice(0, 8)} — reset loop step "${loopStep.id.slice(0, 8)}" to pending, verify step "${failedStep.step_id}" to waiting`);
+        await ensureDashboardRunning();
         process.exit(0);
       }
     }
@@ -685,6 +723,7 @@ async function main() {
     }
 
     console.log(`Resumed run ${run.id.slice(0, 8)} from step "${failedStep.step_id}"`);
+    await ensureDashboardRunning();
     return;
   }
 
@@ -716,6 +755,7 @@ async function main() {
     process.stdout.write(
       [`Run: #${run.runNumber} (${run.id})`, `Workflow: ${run.workflowId}`, `Task: ${run.task}`, `Status: ${run.status}`].join("\n") + "\n",
     );
+    await ensureDashboardRunning();
     return;
   }
 

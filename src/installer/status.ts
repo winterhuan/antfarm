@@ -4,6 +4,7 @@ import { loadWorkflowSpec } from "./workflow-spec.js";
 import { resolveWorkflowDir } from "./paths.js";
 import { createBackend, groupAgentsByBackend } from "../backend/index.js";
 import type { BackendType } from "../backend/interface.js";
+import type { WorkflowSpec } from "./types.js";
 
 export type RunInfo = {
   id: string;
@@ -36,6 +37,13 @@ export type WorkflowStatusResult =
   | { status: "ok"; run: RunInfo; steps: StepInfo[] }
   | { status: "not_found"; message: string };
 
+function formatRunNotFoundMessage(query: string, available: string[]): string {
+  if (available.length) {
+    return `No run matching "${query}". Recent runs:\n${available.join("\n")}`;
+  }
+  return `No run matching "${query}". No workflow runs found.`;
+}
+
 export function getWorkflowStatus(query: string): WorkflowStatusResult {
   const db = getDb();
 
@@ -67,9 +75,7 @@ export function getWorkflowStatus(query: string): WorkflowStatusResult {
     });
     return {
       status: "not_found",
-      message: available.length
-        ? `No run matching "${query}". Recent runs:\n${available.join("\n")}`
-        : "No workflow runs found.",
+      message: formatRunNotFoundMessage(query, available),
     };
   }
 
@@ -87,7 +93,21 @@ export type StopWorkflowResult =
   | { status: "not_found"; message: string }
   | { status: "already_done"; message: string };
 
-export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
+type StopWorkflowDeps = {
+  loadWorkflow?: (workflowId: string) => Promise<WorkflowSpec>;
+  groupAgentsByBackend?: (workflow: WorkflowSpec) => Promise<Map<BackendType, WorkflowSpec["agents"]>>;
+  createBackend?: (type: BackendType) => { stopRun(workflow: WorkflowSpec): Promise<void> };
+  emitEvent?: typeof emitEvent;
+};
+
+export async function stopWorkflow(query: string, deps: StopWorkflowDeps = {}): Promise<StopWorkflowResult> {
+  const loadWorkflow = deps.loadWorkflow ?? (async (workflowId: string) => {
+    const workflowDir = resolveWorkflowDir(workflowId);
+    return loadWorkflowSpec(workflowDir);
+  });
+  const groupByBackend = deps.groupAgentsByBackend ?? groupAgentsByBackend;
+  const backendFactory = deps.createBackend ?? createBackend;
+  const emitStatusEvent = deps.emitEvent ?? emitEvent;
   const db = getDb();
 
   // Try exact match first, then prefix match (same pattern as resume command)
@@ -101,9 +121,7 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
     const available = allRuns.map((r) => `  [${r.status}] ${r.id.slice(0, 8)} ${r.task.slice(0, 60)}`);
     return {
       status: "not_found",
-      message: available.length
-        ? `No run matching "${query}". Recent runs:\n${available.join("\n")}`
-        : "No workflow runs found.",
+      message: formatRunNotFoundMessage(query, available),
     };
   }
 
@@ -125,16 +143,15 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
 
   // Stop the backends for this workflow (support mixed backends)
   try {
-    const workflowDir = resolveWorkflowDir(run.workflow_id);
-    const workflow = await loadWorkflowSpec(workflowDir);
+    const workflow = await loadWorkflow(run.workflow_id);
 
     // Group agents by backend type using full resolver (respects CLI/agent/workflow/global/default)
-    const agentsByBackend = await groupAgentsByBackend(workflow);
+    const agentsByBackend = await groupByBackend(workflow);
 
     // Stop each backend
     for (const [backendType, agents] of agentsByBackend) {
       try {
-        const backend = createBackend(backendType);
+        const backend = backendFactory(backendType);
         const subWorkflow = { ...workflow, agents };
         await backend.stopRun(subWorkflow);
       } catch (err) {
@@ -147,7 +164,7 @@ export async function stopWorkflow(query: string): Promise<StopWorkflowResult> {
   }
 
   // Emit event
-  emitEvent({
+  emitStatusEvent({
     ts: new Date().toISOString(),
     event: "run.failed",
     runId: run.id,

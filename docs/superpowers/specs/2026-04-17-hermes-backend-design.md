@@ -106,7 +106,7 @@ Both backends use the same `agentTurn` polling mechanism via the existing `build
 - `src/backend/hermes.ts` - Hermes implementation
 - `src/backend/config-resolver.ts` - Configuration resolution
 - `src/lib/config.ts` - Global config file support
-- `tests/backend/*.test.ts` - Backend tests
+- `src/backend/*.test.ts` - Backend tests
 
 ### Modified Files
 - `src/installer/install.ts` - Use backend abstraction

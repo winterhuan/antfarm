@@ -24,7 +24,7 @@ export type WorkflowAgent = {
   model?: string;
   pollingModel?: string;
   timeoutSeconds?: number;
-  backend?: "openclaw" | "hermes";
+  backend?: "openclaw" | "hermes" | "claude-code" | "codex";
   workspace: WorkflowAgentFiles;
 };
 
@@ -77,7 +77,7 @@ export type WorkflowSpec = {
   id: string;
   name?: string;
   version?: number;
-  defaultBackend?: "openclaw" | "hermes";
+  defaultBackend?: "openclaw" | "hermes" | "claude-code" | "codex";
   polling?: PollingConfig;
   agents: WorkflowAgent[];
   steps: WorkflowStep[];

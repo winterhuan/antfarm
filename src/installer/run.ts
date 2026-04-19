@@ -5,14 +5,19 @@ import { getDb, nextRunNumber } from "../db.js";
 import { logger } from "../lib/logger.js";
 import { emitEvent } from "./events.js";
 import { createBackend, groupAgentsByBackend } from "../backend/index.js";
-import type { BackendType } from "../backend/interface.js";
+import type { Backend, BackendType } from "../backend/interface.js";
+
+type RunWorkflowDeps = {
+  createBackend?: (type: BackendType) => Backend;
+};
 
 export async function runWorkflow(params: {
   workflowId: string;
   taskTitle: string;
   notifyUrl?: string;
   backend?: BackendType;
-}): Promise<{ id: string; runNumber: number; workflowId: string; task: string; status: string }> {
+}, deps: RunWorkflowDeps = {}): Promise<{ id: string; runNumber: number; workflowId: string; task: string; status: string }> {
+  const backendFactory = deps.createBackend ?? createBackend;
   const workflowDir = resolveWorkflowDir(params.workflowId);
   const workflow = await loadWorkflowSpec(workflowDir);
 
@@ -30,6 +35,7 @@ export async function runWorkflow(params: {
 
   const initialContext: Record<string, string> = {
     task: params.taskTitle,
+    run_cwd: process.cwd(),
     ...workflow.context,
   };
 
@@ -66,7 +72,7 @@ export async function runWorkflow(params: {
   const startedBackends: Array<{ type: BackendType; agents: typeof workflow.agents }> = [];
   try {
     for (const [backendType, agents] of agentsByBackend) {
-      const backend = createBackend(backendType);
+      const backend = backendFactory(backendType);
       const subWorkflow = { ...workflow, agents };
       await backend.startRun(subWorkflow);
       startedBackends.push({ type: backendType, agents });
@@ -75,7 +81,7 @@ export async function runWorkflow(params: {
     // Best-effort cleanup: stop already started backends
     for (const { type, agents } of startedBackends) {
       try {
-        const backend = createBackend(type);
+        const backend = backendFactory(type);
         const subWorkflow = { ...workflow, agents };
         await backend.stopRun(subWorkflow);
       } catch (stopErr) {
