@@ -11,6 +11,8 @@ export function createBackend(type: BackendType): Backend {
       return new HermesBackend();
     case 'claude-code':
       return new ClaudeCodeBackend();
+    case 'codex':
+      throw new Error("CodexBackend not yet implemented — pending task 6");
     default:
       throw new Error(`Unknown backend type: ${type}`);
   }
