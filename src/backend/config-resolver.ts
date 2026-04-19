@@ -42,8 +42,8 @@ export async function resolveBackendConfig(
 }
 
 export function validateBackendType(type: string): BackendType {
-  if (type !== 'openclaw' && type !== 'hermes' && type !== 'claude-code') {
-    throw new Error(`Unknown backend type: ${type}. Valid values: openclaw, hermes, claude-code`);
+  if (type !== 'openclaw' && type !== 'hermes' && type !== 'claude-code' && type !== 'codex') {
+    throw new Error(`Unknown backend type: ${type}. Valid values: openclaw, hermes, claude-code, codex`);
   }
   return type as BackendType;
 }

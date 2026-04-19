@@ -12,6 +12,9 @@ describe('validateBackendType', () => {
   it('accepts claude-code', () => {
     assert.equal(validateBackendType('claude-code'), 'claude-code');
   });
+  it('accepts codex', () => {
+    assert.equal(validateBackendType('codex'), 'codex');
+  });
   it('rejects unknown backends', () => {
     assert.throws(() => validateBackendType('nope'), /Unknown backend type/);
   });
