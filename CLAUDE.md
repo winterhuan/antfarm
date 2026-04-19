@@ -102,6 +102,39 @@ The Claude Code backend writes workflow configuration into the **project's** `.c
 - `--bare` — skips CLAUDE.md auto-discovery / hooks / plugin sync for cheaper, context-isolated runs (~$0.06/turn on Opus-4.7-1M vs $0.15 without `--bare`).
 - `--max-budget-usd <n>` — post-hoc circuit breaker, not pre-check. Allows ~3× overshoot before tripping.
 
+## Codex Backend (phase 1: install/uninstall only)
+
+The Codex backend writes workflow configuration to the user's **global** `~/.codex/` directory (same ergonomic choice as Hermes — Codex is designed around per-user state, not per-project). Artifacts:
+
+- `~/.codex/agents/antfarm-<workflowId>-<agentId>.toml` — role overlay per workflow agent. Contains `model`, `sandbox_mode` (from role mapping), `model_reasoning_effort`, and `developer_instructions` (role-specific guardrail). Referenced by both the profile and agent_role entries in config.toml.
+- `~/.codex/config.toml` antfarm-managed block — bounded by `# BEGIN antfarm-managed` / `# END antfarm-managed` comments at end of file. Contains `[profiles."antfarm-<wf>-<agent>"]` for scheduler-driven autonomous runs AND `[agent_roles."antfarm-<wf>-<agent>"]` for user-triggered interactive `spawn()` calls from Codex main agent.
+- `~/.codex/skills/antfarm-workflows/SKILL.md` — main-agent entry point (parallels Hermes skill install).
+
+**Permission model:** OS-level sandbox via `sandbox_mode` in the role overlay. Three values: `read-only`, `workspace-write`, `danger-full-access`. Enforced at syscall level — `read-only` blocks even `printf > file` or `tee` Bash tricks. Stronger than Hermes (toolset-only) and coarser than Claude Code (per-tool). Role → sandbox mapping in `src/backend/codex-policy.ts`.
+
+**config.toml management:** No TOML parser dependency. The antfarm-managed block at file end is identified by marker comments. Install rewrites the block in place; uninstall filters entries by `antfarm-<workflowId>-` prefix. User's hand-edited sections (outside the block) are never touched.
+
+**`startRun` / `stopRun` are intentional no-ops** — shared scheduler is a follow-up with Claude Code. Interactively, users can already invoke workflow agents via Codex main agent's `spawn(message=..., agent_type="antfarm-<wf>-<agent>")`.
+
+**Canonical spawn (scheduler, phase 2):**
+
+```bash
+codex exec \
+  --json --ephemeral --skip-git-repo-check \
+  --cd <workspace-dir> \
+  --profile antfarm-<workflowId>-<agentId> \
+  --output-last-message /tmp/antfarm-<run-id>.txt \
+  -- "<polling prompt>"
+```
+
+Profile supplies model / sandbox / reasoning / prompt — scheduler just passes workspace + prompt + output path.
+
+**PoC-validated gotchas:**
+- `-a/--ask-for-approval` is **only on top-level `codex` command**, NOT on `codex exec`. Don't pass it.
+- `--skip-git-repo-check` is required unless the target dir is a git repo.
+- `read-only` sandbox also blocks `/tmp` writes — use `--add-dir` to open specific paths.
+- `-c key=value` values are TOML-parsed (use `-c model="o3"` with quotes around string values).
+
 ## Known limitations / won't-fix
 
 These are architectural constraints or low-risk edge cases we've deliberately not addressed. Listed here so they don't get re-investigated.
