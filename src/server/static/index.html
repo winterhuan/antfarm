@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Antfarm Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { Router } from '/static/js/router.js';
+import { Layout } from '/static/js/components/layout.js';
+
+// Initialize app
+const app = document.getElementById('app');
+const router = new Router(app);
+</script>
+</body>
+</html>
