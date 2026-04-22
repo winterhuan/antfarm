@@ -164,7 +164,7 @@ function getCodexUserSkillsDir(): string {
 
 export async function installAntfarmSkillForCodex(): Promise<{ installed: boolean; path: string }> {
   const cli = `node ${resolveAntfarmCli()}`;
-  const forceTrigger = `To force a one-shot scheduler pass immediately, run \`${cli} workflow tick <workflow-id>_<agent-id>\`. You may also invoke the antfarm subagent interactively from the Codex main agent: use the \`spawn\` tool with \`agent_type="antfarm-<workflow-id>-<agent-id>"\`.`;
+  const forceTrigger = `To force a one-shot scheduler pass immediately, run \`${cli} workflow tick <workflow-id>_<agent-id>\`. You may also invoke the antfarm subagent interactively from the Codex main agent: use the \`spawn\` tool with \`agent_type="antfarm-<workflow-id>_<agent-id>"\`.`;
   return writeAntfarmSkill(getCodexUserSkillsDir(), {
     antfarmCli: cli,
     forceTriggerSection: forceTrigger,

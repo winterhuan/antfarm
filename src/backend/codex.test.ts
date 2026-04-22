@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { CodexBackend } from './codex.js';
+import { CodexBackend, getCodexProfileName } from './codex.js';
 import { ANTFARM_BLOCK_BEGIN } from './codex-config.js';
 import type { WorkflowSpec } from '../installer/types.js';
 
@@ -51,6 +51,14 @@ function applyBootstrapFiles(workflow: WorkflowSpec): WorkflowSpec {
   return workflow;
 }
 
+describe('getCodexProfileName', () => {
+  it('avoids workflow/agent collisions caused by hyphen-only separation', () => {
+    assert.equal(getCodexProfileName('foo', 'bar-baz'), 'antfarm-foo_bar-baz');
+    assert.equal(getCodexProfileName('foo-bar', 'baz'), 'antfarm-foo-bar_baz');
+    assert.notEqual(getCodexProfileName('foo', 'bar-baz'), getCodexProfileName('foo-bar', 'baz'));
+  });
+});
+
 describe('CodexBackend.install', () => {
   it('writes one role overlay TOML per agent', async () => {
     const be = new CodexBackend();
@@ -58,9 +66,9 @@ describe('CodexBackend.install', () => {
     await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const entries = (await fs.readdir(path.join(tmp, 'agents'))).sort();
     assert.deepEqual(entries, [
-      'antfarm-demo-coder.toml',
-      'antfarm-demo-planner.toml',
-      'antfarm-demo-verifier.toml',
+      'antfarm-demo_coder.toml',
+      'antfarm-demo_planner.toml',
+      'antfarm-demo_verifier.toml',
     ]);
   });
 
@@ -68,12 +76,12 @@ describe('CodexBackend.install', () => {
     const be = new CodexBackend();
     await seedBootstrapFiles(tmp);
     await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
-    const verifier = await fs.readFile(path.join(tmp, 'agents/antfarm-demo-verifier.toml'), 'utf-8');
-    assert.match(verifier, /sandbox_mode = "read-only"/);
-    const coder = await fs.readFile(path.join(tmp, 'agents/antfarm-demo-coder.toml'), 'utf-8');
+    const verifier = await fs.readFile(path.join(tmp, 'agents/antfarm-demo_verifier.toml'), 'utf-8');
+    assert.match(verifier, /sandbox_mode = "workspace-write"/);
+    const coder = await fs.readFile(path.join(tmp, 'agents/antfarm-demo_coder.toml'), 'utf-8');
     assert.match(coder, /sandbox_mode = "workspace-write"/);
-    const planner = await fs.readFile(path.join(tmp, 'agents/antfarm-demo-planner.toml'), 'utf-8');
-    assert.match(planner, /sandbox_mode = "read-only"/);
+    const planner = await fs.readFile(path.join(tmp, 'agents/antfarm-demo_planner.toml'), 'utf-8');
+    assert.match(planner, /sandbox_mode = "workspace-write"/);
   });
 
   it('config.toml contains profiles + agent_roles entries inside antfarm block', async () => {
@@ -82,12 +90,12 @@ describe('CodexBackend.install', () => {
     await be.install(applyBootstrapFiles(makeWorkflow()), tmp);
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8');
     assert.match(cfg, new RegExp(ANTFARM_BLOCK_BEGIN));
-    assert.match(cfg, /\[profiles\."antfarm-demo-planner"\]/);
-    assert.match(cfg, /\[profiles\."antfarm-demo-coder"\]/);
-    assert.match(cfg, /\[profiles\."antfarm-demo-verifier"\]/);
-    assert.match(cfg, /\[agent_roles\."antfarm-demo-planner"\]/);
-    assert.match(cfg, /\[agent_roles\."antfarm-demo-coder"\]/);
-    assert.match(cfg, /\[agent_roles\."antfarm-demo-verifier"\]/);
+    assert.match(cfg, /\[profiles\."antfarm-demo_planner"\]/);
+    assert.match(cfg, /\[profiles\."antfarm-demo_coder"\]/);
+    assert.match(cfg, /\[profiles\."antfarm-demo_verifier"\]/);
+    assert.match(cfg, /\[agent_roles\."antfarm-demo_planner"\]/);
+    assert.match(cfg, /\[agent_roles\."antfarm-demo_coder"\]/);
+    assert.match(cfg, /\[agent_roles\."antfarm-demo_verifier"\]/);
   });
 
   it('installs antfarm-workflows skill globally', async () => {
@@ -130,12 +138,12 @@ describe('CodexBackend.uninstall', () => {
     await be.uninstall('alpha');
 
     const remainingOverlays = (await fs.readdir(path.join(tmp, 'agents'))).sort();
-    assert.ok(remainingOverlays.every((n) => !n.startsWith('antfarm-alpha-')));
-    assert.ok(remainingOverlays.some((n) => n.startsWith('antfarm-beta-')));
+    assert.ok(remainingOverlays.every((n) => !n.startsWith('antfarm-alpha_')));
+    assert.ok(remainingOverlays.some((n) => n.startsWith('antfarm-beta_')));
 
     const cfg = await fs.readFile(path.join(tmp, 'config.toml'), 'utf-8');
-    assert.doesNotMatch(cfg, /antfarm-alpha-/);
-    assert.match(cfg, /antfarm-beta-/);
+    assert.doesNotMatch(cfg, /antfarm-alpha_/);
+    assert.match(cfg, /antfarm-beta_/);
   });
 
   it('removes the whole antfarm block + skill when last workflow is uninstalled', async () => {

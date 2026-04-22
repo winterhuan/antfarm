@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { WorkflowAgent, WorkflowSpec } from "./types.js";
-import { resolveOpenClawStateDir, resolveWorkflowWorkspaceRoot } from "./paths.js";
+import {
+  resolveOpenClawStateDir,
+  resolveWorkflowAgentWorkspaceDir,
+  resolveWorkflowWorkspaceRoot,
+} from "./paths.js";
 import { writeWorkflowFile } from "./workspace-files.js";
 
 export type ProvisionedAgent = {
@@ -31,7 +35,7 @@ function resolveWorkspaceDir(params: {
   agent: WorkflowAgent;
 }): string {
   const baseDir = params.agent.workspace.baseDir?.trim() || params.agent.id;
-  return path.join(resolveAgentWorkspaceRoot(), params.workflowId, baseDir);
+  return resolveWorkflowAgentWorkspaceDir(params.workflowId, baseDir);
 }
 
 export async function provisionAgents(params: {

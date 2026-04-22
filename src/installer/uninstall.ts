@@ -80,7 +80,15 @@ export function selectAntfarmManagedAgents(
     if (!workflowId) {
       return false;
     }
-    return id.startsWith(`${workflowId}_`);
+    if (knownWorkflowIds.size > 0 && !knownWorkflowIds.has(workflowId)) {
+      return false;
+    }
+    if (id.startsWith(`${workflowId}_`)) {
+      return true;
+    }
+
+    const workspaceLeaf = path.basename(path.resolve(workspace));
+    return (!id || !id.includes("/")) && (!!workspaceLeaf && id === workspaceLeaf || !id);
   });
 }
 

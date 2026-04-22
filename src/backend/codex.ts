@@ -28,7 +28,7 @@ const DEFAULT_MODEL = 'gpt-5.3-codex';
 const DEFAULT_REASONING: 'low' | 'medium' | 'high' = 'high';
 
 export function getCodexProfileName(workflowId: string, agentId: string): string {
-  return `antfarm-${workflowId}-${agentId}`;
+  return `antfarm-${workflowId}_${agentId}`;
 }
 
 export class CodexBackend implements Backend {
@@ -46,6 +46,9 @@ export class CodexBackend implements Backend {
 
   private assertSafeAgentKey(workflowId: string, agentId: string): void {
     const key = `${workflowId}-${agentId}`;
+    if (workflowId.includes('_') || agentId.includes('_')) {
+      throw new Error(`Unsafe workflow/agent id combination: "${workflowId}" / "${agentId}" (underscores are reserved)`);
+    }
     if (key.includes('/') || key.includes('..') || key.includes('\\') || key.includes('"')) {
       throw new Error(`Unsafe workflow/agent id combination: "${workflowId}" / "${agentId}"`);
     }
@@ -127,7 +130,7 @@ export class CodexBackend implements Backend {
    * Used during install to preserve other workflows' entries when rewriting the block.
    */
   private async readExistingOtherWorkflowEntries(excludeWorkflowId: string): Promise<AntfarmConfigEntry[]> {
-    const prefix = `antfarm-${excludeWorkflowId}-`;
+    const prefix = `antfarm-${excludeWorkflowId}_`;
     const cfg = await fs.readFile(this.getConfigPath(), 'utf-8').catch(() => '');
     if (!cfg.includes(ANTFARM_BLOCK_BEGIN)) return [];
 

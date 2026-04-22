@@ -10,7 +10,12 @@ import { buildCodexExecArgv } from "../backend/codex-spawn.js";
 import type { BackendType } from "../backend/interface.js";
 import { resolveBackendConfig } from "../backend/config-resolver.js";
 import { buildWorkPrompt } from "../installer/agent-cron.js";
-import { resolveRunRoot, resolveWorkflowDir, resolveWorkflowWorkspaceRoot } from "../installer/paths.js";
+import {
+  resolveAntfarmRoot,
+  resolveRunRoot,
+  resolveWorkflowAgentWorkspaceDir,
+  resolveWorkflowDir,
+} from "../installer/paths.js";
 import { claimStep, failStep } from "../installer/step-ops.js";
 import type { AgentRole, WorkflowAgent, WorkflowSpec } from "../installer/types.js";
 import { loadWorkflowSpec } from "../installer/workflow-spec.js";
@@ -101,6 +106,20 @@ function splitFullAgentId(fullAgentId: string): { workflowId: string; agentId: s
   };
 }
 
+function uniquePaths(paths: string[]): string[] {
+  return Array.from(new Set(paths.map((entry) => path.resolve(entry))));
+}
+
+export function getCodexExecPaths(
+  workflowId: string,
+  agent: WorkflowAgent,
+  executionCwd: string,
+): { workspaceDir: string; addDirs: string[] } {
+  const workspaceDir = resolveWorkflowAgentWorkspaceDir(workflowId, agent.workspace.baseDir.trim());
+  const addDirs = uniquePaths([executionCwd, resolveAntfarmRoot()]).filter((dir) => dir !== workspaceDir);
+  return { workspaceDir, addDirs };
+}
+
 function getExecutionCwd(runId: string): string {
   const db = getDb();
   const row = db.prepare("SELECT context FROM runs WHERE id = ?").get(runId) as { context: string } | undefined;
@@ -173,7 +192,7 @@ async function loadLaunchableAgentContext(fullAgentId: string): Promise<Launchab
 }
 
 async function loadBootstrapPrompt(workflowId: string, agent: WorkflowAgent): Promise<string> {
-  const workspaceDir = path.join(resolveWorkflowWorkspaceRoot(), workflowId, agent.workspace.baseDir.trim());
+  const workspaceDir = resolveWorkflowAgentWorkspaceDir(workflowId, agent.workspace.baseDir.trim());
   const sections: string[] = [];
 
   for (const fileName of Object.keys(agent.workspace.files).sort()) {
@@ -263,14 +282,16 @@ async function spawnBackendProcess(params: {
   const runtimeDir = await ensureRuntimeDir(params.runId);
 
   if (params.ctx.backend === "codex") {
+    const paths = getCodexExecPaths(params.ctx.workflowId, params.ctx.agent, cwd);
     const argv = buildCodexExecArgv({
       profileName: getCodexProfileName(params.ctx.workflowId, params.ctx.agent.id),
-      workspaceDir: cwd,
+      workspaceDir: paths.workspaceDir,
       prompt: params.prompt,
       lastMessagePath: path.join(runtimeDir, `${params.stepId}-last-message.txt`),
+      addDirs: paths.addDirs,
     });
     return spawn(process.env.ANTFARM_CODEX_BIN || "codex", argv, {
-      cwd,
+      cwd: paths.workspaceDir,
       stdio: ["ignore", "pipe", "pipe"],
     });
   }

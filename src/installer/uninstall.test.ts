@@ -23,7 +23,7 @@ describe("selectAntfarmManagedAgents", () => {
   it("falls back to workspace location for partially-corrupt Antfarm state", () => {
     const workspaceRoot = path.join("/tmp", "openclaw", "workspaces", "workflows");
     const agents = [
-      { id: "bug-fix_fixer", workspace: path.join(workspaceRoot, "bug-fix", "fixer") },
+      { id: "fixer", workspace: path.join(workspaceRoot, "bug-fix", "fixer") },
       { id: "thirdparty/coder", workspace: path.join(workspaceRoot, "bug-fix", "outside") },
       { id: "main", workspace: "/tmp/openclaw/workspaces/main" },
     ] as Array<Record<string, unknown>>;
@@ -31,7 +31,7 @@ describe("selectAntfarmManagedAgents", () => {
     const selected = selectAntfarmManagedAgents(agents, [], workspaceRoot);
     assert.deepEqual(
       selected.map((entry) => entry.id),
-      ["bug-fix_fixer"],
+      ["fixer"],
     );
   });
 });

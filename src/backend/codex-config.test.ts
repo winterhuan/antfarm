@@ -57,16 +57,16 @@ describe('writeRoleOverlayFile', () => {
 });
 
 describe('removeRoleOverlayFiles', () => {
-  it('deletes matching antfarm-<workflowId>-*.toml files, leaves others alone', async () => {
+  it('deletes matching antfarm-<workflowId>_*.toml files, leaves others alone', async () => {
     const d = path.join(tmp, 'overlays-dir');
     await fs.mkdir(d, { recursive: true });
-    await fs.writeFile(path.join(d, 'antfarm-demo-coder.toml'), 'x', 'utf-8');
-    await fs.writeFile(path.join(d, 'antfarm-demo-verifier.toml'), 'x', 'utf-8');
-    await fs.writeFile(path.join(d, 'antfarm-other-a.toml'), 'x', 'utf-8');
+    await fs.writeFile(path.join(d, 'antfarm-demo_coder.toml'), 'x', 'utf-8');
+    await fs.writeFile(path.join(d, 'antfarm-demo_verifier.toml'), 'x', 'utf-8');
+    await fs.writeFile(path.join(d, 'antfarm-other_a.toml'), 'x', 'utf-8');
     await fs.writeFile(path.join(d, 'user-custom.toml'), 'x', 'utf-8');
     await removeRoleOverlayFiles({ agentsDir: d, workflowId: 'demo' });
     const remaining = (await fs.readdir(d)).sort();
-    assert.deepEqual(remaining, ['antfarm-other-a.toml', 'user-custom.toml']);
+    assert.deepEqual(remaining, ['antfarm-other_a.toml', 'user-custom.toml']);
   });
 
   it('is a no-op when directory does not exist', async () => {
@@ -142,18 +142,18 @@ describe('upsertAntfarmConfigBlock', () => {
 describe('removeWorkflowEntriesFromConfigBlock', () => {
   it('removes entries matching the workflow prefix, keeps others', async () => {
     const cfgPath = path.join(tmp, 'cfg-multi-wf.toml');
-    const initial = `[user]\n\n${ANTFARM_BLOCK_BEGIN}\n[profiles."antfarm-demo-a"]\nmodel = "x"\nsandbox_mode = "read-only"\nmodel_reasoning_effort = "high"\n[agent_roles."antfarm-demo-a"]\ndescription = "A"\nconfig_file = "~/a.toml"\n[profiles."antfarm-other-b"]\nmodel = "y"\nsandbox_mode = "workspace-write"\nmodel_reasoning_effort = "medium"\n[agent_roles."antfarm-other-b"]\ndescription = "B"\nconfig_file = "~/b.toml"\n${ANTFARM_BLOCK_END}\n`;
+    const initial = `[user]\n\n${ANTFARM_BLOCK_BEGIN}\n[profiles."antfarm-demo_a"]\nmodel = "x"\nsandbox_mode = "read-only"\nmodel_reasoning_effort = "high"\n[agent_roles."antfarm-demo_a"]\ndescription = "A"\nconfig_file = "~/a.toml"\n[profiles."antfarm-other_b"]\nmodel = "y"\nsandbox_mode = "workspace-write"\nmodel_reasoning_effort = "medium"\n[agent_roles."antfarm-other_b"]\ndescription = "B"\nconfig_file = "~/b.toml"\n${ANTFARM_BLOCK_END}\n`;
     await fs.writeFile(cfgPath, initial, 'utf-8');
     await removeWorkflowEntriesFromConfigBlock({ configPath: cfgPath, workflowId: 'demo' });
     const text = await fs.readFile(cfgPath, 'utf-8');
-    assert.doesNotMatch(text, /antfarm-demo-a/);
-    assert.match(text, /antfarm-other-b/);
+    assert.doesNotMatch(text, /antfarm-demo_a/);
+    assert.match(text, /antfarm-other_b/);
     assert.match(text, new RegExp(ANTFARM_BLOCK_BEGIN));
   });
 
   it('removes the block entirely if no entries remain', async () => {
     const cfgPath = path.join(tmp, 'cfg-only-one.toml');
-    const initial = `[user]\n\n${ANTFARM_BLOCK_BEGIN}\n[profiles."antfarm-demo-a"]\nmodel = "x"\nsandbox_mode = "read-only"\nmodel_reasoning_effort = "high"\n[agent_roles."antfarm-demo-a"]\ndescription = "A"\nconfig_file = "~/a.toml"\n${ANTFARM_BLOCK_END}\n`;
+    const initial = `[user]\n\n${ANTFARM_BLOCK_BEGIN}\n[profiles."antfarm-demo_a"]\nmodel = "x"\nsandbox_mode = "read-only"\nmodel_reasoning_effort = "high"\n[agent_roles."antfarm-demo_a"]\ndescription = "A"\nconfig_file = "~/a.toml"\n${ANTFARM_BLOCK_END}\n`;
     await fs.writeFile(cfgPath, initial, 'utf-8');
     await removeWorkflowEntriesFromConfigBlock({ configPath: cfgPath, workflowId: 'demo' });
     const text = await fs.readFile(cfgPath, 'utf-8');

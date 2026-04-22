@@ -49,7 +49,7 @@ export async function removeRoleOverlayFiles(params: {
   agentsDir: string;
   workflowId: string;
 }): Promise<void> {
-  const prefix = `antfarm-${params.workflowId}-`;
+  const prefix = `antfarm-${params.workflowId}_`;
   let entries: string[] = [];
   try { entries = await fs.readdir(params.agentsDir); } catch { return; }
   for (const name of entries) {
@@ -132,7 +132,7 @@ export async function removeWorkflowEntriesFromConfigBlock(params: {
   const block = content.slice(beginIdx, endIdx + ANTFARM_BLOCK_END.length);
 
   const kept: AntfarmConfigEntry[] = parseAntfarmBlock(block).filter(
-    (e) => !e.profileName.startsWith(`antfarm-${params.workflowId}-`),
+    (e) => !e.profileName.startsWith(`antfarm-${params.workflowId}_`),
   );
 
   await upsertAntfarmConfigBlock({ configPath: params.configPath, entries: kept });

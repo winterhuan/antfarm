@@ -8,17 +8,19 @@ import type { AgentRole } from '../installer/types.js';
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 
 /**
- * Map antfarm agent role to Codex sandbox mode. Read-only roles can still
- * execute trusted commands (ls, cat, tests) — they're blocked from WRITES,
- * not from reading or running.
+ * Antfarm's Codex path needs filesystem writes even for review-style roles:
+ * step completion updates the run state DB, and some roles also update files
+ * under the per-agent workspace. Codex cannot express "repo read-only, state
+ * writable", so all roles use `workspace-write` and rely on
+ * developer_instructions to forbid repo edits for non-coding roles.
  */
 export const ROLE_SANDBOX: Record<AgentRole, CodexSandboxMode> = {
-  analysis:     'read-only',
+  analysis:     'workspace-write',
   coding:       'workspace-write',
-  verification: 'read-only',
+  verification: 'workspace-write',
   testing:      'workspace-write',
-  pr:           'read-only',
-  scanning:     'read-only',
+  pr:           'workspace-write',
+  scanning:     'workspace-write',
 };
 
 export function getCodexSandboxMode(role: AgentRole | undefined): CodexSandboxMode {
@@ -40,15 +42,15 @@ export function buildRoleDeveloperInstructions(
 
   const guardrails: Record<Exclude<AgentRole, 'coding'>, string> = {
     analysis:
-      'You are in ANALYSIS mode. DO NOT call write_file, edit, or apply_patch. Read, grep, and search freely. Put proposed changes in your text output — do not apply them.',
+      'You are in ANALYSIS mode. Antfarm uses workspace-write so you can report step results and update agent-workspace state, but you MUST NOT modify repository files. Read, grep, and search freely. Put proposed changes in your text output — do not apply them.',
     verification:
-      'You are in VERIFICATION mode. The sandbox is read-only — writes will fail at syscall level. Run lint/typecheck/tests via shell and report PASS or FAIL.',
+      'You are in VERIFICATION mode. Antfarm uses workspace-write so you can report step results, but you MUST NOT modify repository files. Run lint/typecheck/tests via shell and report PASS or FAIL.',
     testing:
-      'You are in TESTING mode. Run the existing test suite and report results. You may edit test files if the work input explicitly asks for it, but DO NOT modify application source code.',
+      'You are in TESTING mode. Antfarm uses workspace-write so you can report step results and update agent-workspace files. Run the existing test suite and report results. You may edit test files or agent-workspace files if the work input explicitly asks for it, but DO NOT modify application source code.',
     pr:
-      'You are in PR mode. Create or update pull requests from already-committed changes using git and gh. DO NOT edit source files or tests.',
+      'You are in PR mode. Antfarm uses workspace-write so you can report step results and run git/gh commands, but you MUST NOT edit source files or tests.',
     scanning:
-      'You are in SCANNING mode. You are read-only. Use read_file, grep, search, and web_search to find vulnerabilities. Output findings; do not fix them.',
+      'You are in SCANNING mode. Antfarm uses workspace-write so you can report step results, but you MUST NOT modify repository files. Use read_file, grep, search, and web_search to find vulnerabilities. Output findings; do not fix them.',
   };
 
   return `${header}\n\n${guardrails[role as Exclude<AgentRole, 'coding'>]}`;

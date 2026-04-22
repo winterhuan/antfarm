@@ -50,6 +50,16 @@ export function resolveWorkflowWorkspaceDir(workflowId: string): string {
   return path.join(resolveWorkflowWorkspaceRoot(), workflowId);
 }
 
+export function resolveWorkflowAgentWorkspaceDir(workflowId: string, baseDir: string): string {
+  const workflowRoot = resolveWorkflowWorkspaceDir(workflowId);
+  const candidate = path.resolve(workflowRoot, baseDir.trim());
+  const relative = path.relative(workflowRoot, candidate);
+  if (relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))) {
+    return candidate;
+  }
+  throw new Error(`workspace.baseDir "${baseDir}" must stay within the workflow workspace root`);
+}
+
 export function resolveRunRoot(): string {
   return path.join(resolveAntfarmRoot(), "runs");
 }

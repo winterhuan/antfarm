@@ -59,6 +59,13 @@ function validateAgents(agents: WorkflowAgent[], workflowDir: string) {
     if (!agent.workspace?.baseDir?.trim()) {
       throw new Error(`workflow.yml missing workspace.baseDir for agent "${agent.id}"`);
     }
+    const baseDir = agent.workspace.baseDir.trim();
+    if (path.isAbsolute(baseDir)) {
+      throw new Error(`workflow.yml workspace.baseDir for agent "${agent.id}" must not be absolute`);
+    }
+    if (baseDir.split(/[\\/]+/).includes("..")) {
+      throw new Error(`workflow.yml workspace.baseDir for agent "${agent.id}" must not escape the workflow workspace root`);
+    }
     if (!agent.workspace?.files || Object.keys(agent.workspace.files).length === 0) {
       throw new Error(`workflow.yml missing workspace.files for agent "${agent.id}"`);
     }

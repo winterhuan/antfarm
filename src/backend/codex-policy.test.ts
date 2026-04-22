@@ -7,23 +7,23 @@ import {
 } from './codex-policy.js';
 
 describe('getCodexSandboxMode', () => {
-  it('maps analysis to read-only', () => {
-    assert.equal(getCodexSandboxMode('analysis'), 'read-only');
+  it('maps analysis to workspace-write so it can report step results', () => {
+    assert.equal(getCodexSandboxMode('analysis'), 'workspace-write');
   });
   it('maps coding to workspace-write', () => {
     assert.equal(getCodexSandboxMode('coding'), 'workspace-write');
   });
-  it('maps verification to read-only', () => {
-    assert.equal(getCodexSandboxMode('verification'), 'read-only');
+  it('maps verification to workspace-write so it can report step results', () => {
+    assert.equal(getCodexSandboxMode('verification'), 'workspace-write');
   });
   it('maps testing to workspace-write', () => {
     assert.equal(getCodexSandboxMode('testing'), 'workspace-write');
   });
-  it('maps pr to read-only', () => {
-    assert.equal(getCodexSandboxMode('pr'), 'read-only');
+  it('maps pr to workspace-write so it can report step results', () => {
+    assert.equal(getCodexSandboxMode('pr'), 'workspace-write');
   });
-  it('maps scanning to read-only', () => {
-    assert.equal(getCodexSandboxMode('scanning'), 'read-only');
+  it('maps scanning to workspace-write so it can report step results', () => {
+    assert.equal(getCodexSandboxMode('scanning'), 'workspace-write');
   });
   it('undefined role defaults to workspace-write (coding)', () => {
     assert.equal(getCodexSandboxMode(undefined), 'workspace-write');
@@ -37,9 +37,9 @@ describe('buildRoleDeveloperInstructions', () => {
     assert.match(text, /verifier/);
     assert.match(text, /verification/);
   });
-  it('for read-only roles, mentions DO NOT call write tools', () => {
+  it('for non-coding roles, states the repo must not be modified', () => {
     const text = buildRoleDeveloperInstructions('verification', 'wf', 'a');
-    assert.match(text, /DO NOT.*write|read-only/i);
+    assert.match(text, /MUST NOT modify repository files|workspace-write/i);
   });
   it('for coding role, does not inject read-only guardrail', () => {
     const text = buildRoleDeveloperInstructions('coding', 'wf', 'a');
