@@ -7,7 +7,7 @@
 
 ## Phase 1: Foundation
 
-- [ ] **IMPL-001**: Implement AntfarmError class hierarchy foundation → [📋](./.task/IMPL-001.json)  
+- [x] **IMPL-001**: Implement AntfarmError class hierarchy foundation → [📋](./.task/IMPL-001.json) | [✅](./.summaries/IMPL-001-summary.md)  
   *F-004: Base class + 7 subclasses, MODULE.ACTION.REASON error codes, Object.freeze*
 
 - [ ] **IMPL-002**: Create standardized test patterns and utilities → [📋](./.task/IMPL-002.json)  

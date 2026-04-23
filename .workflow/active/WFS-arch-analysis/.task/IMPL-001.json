@@ -2,12 +2,15 @@
   "id": "IMPL-001",
   "title": "Implement AntfarmError class hierarchy foundation",
   "description": "Define AntfarmError base class with code, context, cause, timestamp and Object.freeze. Create 7 subclasses (BackendError, ProfileError, StepError, StepRetryExhausted, StoryRetryExhausted, StepAbandoned, ConfigError, CliError, TemplateError, ValidationError, UsageError, NotFoundError). Establish MODULE.ACTION.REASON error code convention. This is Phase 1 foundation task blocking F-001, F-002, F-003, F-005.",
-  "status": "pending",
+  "status": "completed",
   "type": "infrastructure",
   "action": "Create",
   "priority": "critical",
   "effort": "medium",
-  "scope": ["src/lib/errors.ts", "src/lib/errors/"],
+  "scope": [
+    "src/lib/errors.ts",
+    "src/lib/errors/"
+  ],
   "focus_paths": [
     "src/lib/",
     "src/backend/",
@@ -16,7 +19,6 @@
   ],
   "depends_on": [],
   "parallel_group": 1,
-
   "convergence": {
     "criteria": [
       "src/lib/errors.ts exists with AntfarmError base class",
@@ -29,7 +31,6 @@
     "verification": "npx tsc --noEmit src/lib/errors.ts && node --input-type=module -e \"import('./src/lib/errors.ts').then(m => console.log(Object.keys(m)))\"",
     "definition_of_done": "AntfarmError hierarchy is defined, compiles, and ready for migration in dependent tasks"
   },
-
   "files": [
     {
       "path": "src/lib/errors.ts",
@@ -80,7 +81,6 @@
       "change": "Add template and missingKeys fields"
     }
   ],
-
   "implementation": [
     {
       "step": 1,
@@ -114,7 +114,9 @@
         "Implement base class with Object.freeze",
         "Export base class"
       ],
-      "depends_on": [1],
+      "depends_on": [
+        1
+      ],
       "output": "base_class"
     },
     {
@@ -135,7 +137,9 @@
         "Add type-specific fields",
         "Export all classes"
       ],
-      "depends_on": [2],
+      "depends_on": [
+        2
+      ],
       "output": "subclasses"
     },
     {
@@ -152,7 +156,9 @@
         "Provide 10+ examples",
         "Add type-safe code constants"
       ],
-      "depends_on": [3],
+      "depends_on": [
+        3
+      ],
       "output": "convention_docs"
     },
     {
@@ -167,16 +173,19 @@
         "Compile errors.ts",
         "Verify exports are accessible"
       ],
-      "depends_on": [4],
+      "depends_on": [
+        4
+      ],
       "output": "compilation_verified"
     }
   ],
-
   "pre_analysis": [
     {
       "step": "load_context_package",
       "action": "Load context package for artifact paths and smart context",
-      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"
+      ],
       "output_to": "context_package",
       "on_error": "fail"
     },
@@ -200,7 +209,6 @@
       "output_to": "error_patterns"
     }
   ],
-
   "artifacts": [
     {
       "type": "feature_spec",
@@ -219,7 +227,6 @@
       "usage": "SME analysis for error patterns"
     }
   ],
-
   "test": {
     "commands": {
       "run_tests": "npx tsx --test src/lib/errors.test.ts",
@@ -237,7 +244,6 @@
       "Mutation tests verify Object.freeze"
     ]
   },
-
   "risks": [
     {
       "description": "Error class design may not cover all existing error patterns",
@@ -252,7 +258,6 @@
       "mitigation": "Search for mutation patterns; document that errors are immutable"
     }
   ],
-
   "code_skeleton": {
     "interfaces": [
       {
@@ -265,21 +270,27 @@
       {
         "name": "AntfarmError",
         "purpose": "Base error class with structured metadata",
-        "methods": ["constructor", "toJSON"]
+        "methods": [
+          "constructor",
+          "toJSON"
+        ]
       },
       {
         "name": "BackendError",
         "purpose": "Backend-specific errors",
-        "methods": ["constructor"]
+        "methods": [
+          "constructor"
+        ]
       },
       {
         "name": "StepError",
         "purpose": "Step execution errors",
-        "methods": ["constructor"]
+        "methods": [
+          "constructor"
+        ]
       }
     ]
   },
-
   "meta": {
     "type": "infrastructure",
     "agent": "@code-developer",
@@ -291,16 +302,21 @@
       "enable_resume": false
     }
   },
-
   "cli_execution": {
     "id": "WFS-arch-analysis-IMPL-001",
     "strategy": "new"
   },
-
   "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
   "source": {
     "tool": "workflow-plan",
     "session_id": "WFS-arch-analysis",
     "feature_id": "F-004"
-  }
+  },
+  "status_history": [
+    {
+      "from": "pending",
+      "to": "completed",
+      "changed_at": "2026-04-23T16:33:22+08:00"
+    }
+  ]
 }
