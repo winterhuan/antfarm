@@ -8,6 +8,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Story } from "./types.js";
 import crypto from "node:crypto";
+import { freeze, freezeArray } from "../types/immutable.js";
 
 /**
  * Parse KEY: value lines from step output with support for multi-line values.
@@ -16,35 +17,35 @@ import crypto from "node:crypto";
  * Skips STORIES_JSON keys (handled separately).
  */
 export function parseOutputKeyValues(output: string): Record<string, string> {
-  const result: Record<string, string> = {};
   const lines = output.split("\n");
   let pendingKey: string | null = null;
   let pendingValue = "";
 
-  function commitPending() {
+  function commitPending(acc: Record<string, string>): Record<string, string> {
     if (pendingKey && !pendingKey.startsWith("STORIES_JSON")) {
-      result[pendingKey.toLowerCase()] = pendingValue.trim();
+      return { ...acc, [pendingKey.toLowerCase()]: pendingValue.trim() };
     }
-    pendingKey = null;
-    pendingValue = "";
+    return acc;
   }
 
-  for (const line of lines) {
+  const result = lines.reduce((acc: Record<string, string>, line: string): Record<string, string> => {
     const match = line.match(/^([A-Z_]+):\s*(.*)$/);
     if (match) {
-      // New KEY: line found — flush previous key
-      commitPending();
+      // New KEY: line found - flush previous key and start new
+      const newAcc = commitPending(acc);
       pendingKey = match[1];
       pendingValue = match[2];
+      return newAcc;
     } else if (pendingKey) {
-      // Continuation line — append to current key's value
+      // Continuation line - accumulate value
       pendingValue += "\n" + line;
+      return acc;
     }
-  }
-  // Flush any remaining pending value
-  commitPending();
+    return acc;
+  }, {});
 
-  return result;
+  // Flush any remaining pending value
+  return commitPending(result);
 }
 
 /**
@@ -54,7 +55,7 @@ export function parseAndInsertStories(
   db: DatabaseSync,
   runId: string,
   output: string
-): Story[] {
+): readonly Story[] {
   const stories = extractStoriesFromOutput(output);
 
   const now = new Date().toISOString();
@@ -67,33 +68,33 @@ export function parseAndInsertStories(
   for (let i = 0; i < stories.length; i++) {
     const s = stories[i];
     const id = crypto.randomUUID();
-    insert.run(id, runId, i, s.id, s.title, s.description, JSON.stringify(s.acceptanceCriteria), now, now);
+    insert.run(id, runId, i, s.id, s.title, s.description, JSON.stringify(s.acceptanceCriteria as string[]), now, now);
 
-    insertedStories.push({
+    insertedStories.push(freeze({
       id,
       runId,
       storyIndex: i,
       storyId: s.id,
       title: s.title,
       description: s.description,
-      acceptanceCriteria: s.acceptanceCriteria,
+      acceptanceCriteria: s.acceptanceCriteria as readonly string[],
       status: "pending",
       retryCount: 0,
       maxRetries: 2,
-    });
+    }) as Story);
   }
 
-  return insertedStories;
+  return freezeArray(insertedStories);
 }
 
 /**
  * Extract stories array from STORIES_JSON in output.
  */
 function extractStoriesFromOutput(output: string): Array<{
-  id: string;
-  title: string;
-  description: string;
-  acceptanceCriteria: string[];
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly acceptanceCriteria: ReadonlyArray<string>;
 }> {
   // Try parsing as JSON first
   try {
@@ -132,10 +133,10 @@ function extractStoriesFromOutput(output: string): Array<{
  * Validate and normalize stories array.
  */
 function validateAndNormalizeStories(stories: any[]): Array<{
-  id: string;
-  title: string;
-  description: string;
-  acceptanceCriteria: string[];
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly acceptanceCriteria: ReadonlyArray<string>;
 }> {
   if (!Array.isArray(stories)) {
     throw new Error("STORIES_JSON must be an array");
@@ -145,15 +146,8 @@ function validateAndNormalizeStories(stories: any[]): Array<{
   }
 
   const seenIds = new Set<string>();
-  const normalized: Array<{
-    id: string;
-    title: string;
-    description: string;
-    acceptanceCriteria: string[];
-  }> = [];
 
-  for (let i = 0; i < stories.length; i++) {
-    const s = stories[i];
+  const normalized = stories.reduce((acc: Array<{ readonly id: string; readonly title: string; readonly description: string; readonly acceptanceCriteria: ReadonlyArray<string> }>, s: any, i: number) => {
     // Accept both camelCase and snake_case
     const ac = s.acceptanceCriteria ?? s.acceptance_criteria;
     if (!s.id || !s.title || !s.description || !Array.isArray(ac) || ac.length === 0) {
@@ -165,13 +159,13 @@ function validateAndNormalizeStories(stories: any[]): Array<{
       throw new Error(`STORIES_JSON has duplicate story id "${s.id}"`);
     }
     seenIds.add(s.id);
-    normalized.push({
+    return [...acc, freeze({
       id: s.id,
       title: s.title,
       description: s.description,
-      acceptanceCriteria: ac,
-    });
-  }
+      acceptanceCriteria: freezeArray(ac),
+    })];
+  }, []);
 
   return normalized;
 }
@@ -179,24 +173,24 @@ function validateAndNormalizeStories(stories: any[]): Array<{
 /**
  * Get all stories for a run, ordered by story_index.
  */
-export function getStories(db: DatabaseSync, runId: string): Story[] {
+export function getStories(db: DatabaseSync, runId: string): readonly Story[] {
   const rows = db.prepare(
     "SELECT * FROM stories WHERE run_id = ? ORDER BY story_index ASC"
   ).all(runId) as any[];
 
-  return rows.map(r => ({
+  return freezeArray(rows.map(r => freeze({
     id: r.id,
     runId: r.run_id,
     storyIndex: r.story_index,
     storyId: r.story_id,
     title: r.title,
     description: r.description,
-    acceptanceCriteria: JSON.parse(r.acceptance_criteria),
+    acceptanceCriteria: freezeArray(JSON.parse(r.acceptance_criteria)),
     status: r.status,
     output: r.output ?? undefined,
     retryCount: r.retry_count,
     maxRetries: r.max_retries,
-  }));
+  })) as Story[]);
 }
 
 /**
@@ -212,19 +206,19 @@ export function getCurrentStory(db: DatabaseSync, stepId: string): Story | null 
   const row = db.prepare("SELECT * FROM stories WHERE id = ?").get(step.current_story_id) as any;
   if (!row) return null;
 
-  return {
+  return freeze({
     id: row.id,
     runId: row.run_id,
     storyIndex: row.story_index,
     storyId: row.story_id,
     title: row.title,
     description: row.description,
-    acceptanceCriteria: JSON.parse(row.acceptance_criteria),
+    acceptanceCriteria: freezeArray(JSON.parse(row.acceptance_criteria)),
     status: row.status,
     output: row.output ?? undefined,
     retryCount: row.retry_count,
     maxRetries: row.max_retries,
-  };
+  }) as Story;
 }
 
 /**

@@ -10,10 +10,6 @@ import type { LoopConfig, Story } from "./types.js";
 import {
   parseOutputKeyValues,
   parseAndInsertStories,
-  getStories,
-  getCurrentStory,
-  formatStoryForTemplate,
-  formatCompletedStories,
 } from "./step-parser.js";
 import {
   resolveTemplate,
@@ -22,11 +18,11 @@ import {
 } from "./step-template.js";
 import {
   checkLoopContinuation,
-  handleVerifyEachCompletion,
 } from "./step-loop.js";
 import { getWorkflowId } from "./step-utils.js";
 import { emitEvent } from "./events.js";
 import { logger } from "../lib/logger.js";
+import { freeze } from "../types/immutable.js";
 
 export type PeekResult = "HAS_WORK" | "NO_WORK";
 
@@ -109,13 +105,16 @@ export function claimStep(
   const runStatus = db.prepare("SELECT status FROM runs WHERE id = ?").get(step.run_id) as { status: string } | undefined;
   if (runStatus?.status === "failed") return { found: false };
 
-  // Get run context
+  // Get run context - immutable update
   const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(step.run_id) as { context: string } | undefined;
-  const context: Record<string, string> = run ? JSON.parse(run.context) : {};
+  const baseContext: Record<string, string> = run ? JSON.parse(run.context) : {};
 
-  // Always inject run_id so templates can use {{run_id}}
-  context["run_id"] = step.run_id;
-  context["has_frontend_changes"] = "false";
+  // Always inject run_id and has_frontend_changes using spread
+  const context = freeze({
+    ...baseContext,
+    run_id: step.run_id,
+    has_frontend_changes: "false",
+  });
 
   // Single step: existing logic
   db.prepare(
@@ -177,14 +176,17 @@ export function completeStep(
     return { advanced: false, runCompleted: false };
   }
 
-  // Merge KEY: value lines into run context
+  // Merge KEY: value lines into run context using immutable reduce
   const run = db.prepare("SELECT context FROM runs WHERE id = ?").get(step.run_id) as { context: string };
-  const context: Record<string, string> = JSON.parse(run.context);
+  const currentContext: Record<string, string> = JSON.parse(run.context);
 
   const parsed = parseOutputKeyValues(output);
-  for (const [key, value] of Object.entries(parsed)) {
-    context[key] = value;
-  }
+  const context = freeze(
+    Object.entries(parsed).reduce(
+      (acc, [key, value]) => ({ ...acc, [key]: value }),
+      currentContext
+    )
+  );
 
   db.prepare(
     "UPDATE runs SET context = ?, updated_at = datetime('now') WHERE id = ?"

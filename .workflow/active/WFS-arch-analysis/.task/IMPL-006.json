@@ -2,20 +2,27 @@
   "id": "IMPL-006",
   "title": "Implement branded types and discriminated unions for type safety",
   "description": "Create branded types for IDs: WorkflowId, StepId, RunId, AgentId. Implement discriminated unions for StepResult by status and BackendConfig by type. Add smart constructors (workflowId(), stepId(), etc.) as only creation path. Apply ValidationResult<T> pattern replacing throw-based validation. Depends on F-004 and F-001.",
-  "status": "pending",
+  "status": "completed",
   "type": "enhancement",
   "action": "Implement",
   "priority": "medium",
   "effort": "medium",
-  "scope": ["src/types/branded.ts", "src/types/unions.ts", "src/installer/types.ts", "src/backend/interface.ts"],
+  "scope": [
+    "src/types/branded.ts",
+    "src/types/unions.ts",
+    "src/installer/types.ts",
+    "src/backend/interface.ts"
+  ],
   "focus_paths": [
     "src/installer/types.ts",
     "src/backend/interface.ts",
     "src/lib/"
   ],
-  "depends_on": ["IMPL-001", "IMPL-003"],
+  "depends_on": [
+    "IMPL-001",
+    "IMPL-003"
+  ],
   "parallel_group": 4,
-
   "convergence": {
     "criteria": [
       "Brand<T, B> type and branded ID types defined",
@@ -28,7 +35,6 @@
     "verification": "npx tsc --noEmit && node --input-type=module -e \"import('./src/types/branded.js').then(m => console.log('Branded types OK'))\"",
     "definition_of_done": "Type-safe ID handling and discriminated unions implemented across codebase"
   },
-
   "files": [
     {
       "path": "src/types/branded.ts",
@@ -73,7 +79,6 @@
       "change": "Use discriminated BackendConfig union"
     }
   ],
-
   "implementation": [
     {
       "step": 1,
@@ -108,7 +113,9 @@
         "Implement validation logic",
         "Export constructors"
       ],
-      "depends_on": [1],
+      "depends_on": [
+        1
+      ],
       "output": "constructors"
     },
     {
@@ -127,7 +134,9 @@
         "Define status interfaces",
         "Create union type"
       ],
-      "depends_on": [2],
+      "depends_on": [
+        2
+      ],
       "output": "step_unions"
     },
     {
@@ -146,7 +155,9 @@
         "Define backend-specific configs",
         "Create union"
       ],
-      "depends_on": [3],
+      "depends_on": [
+        3
+      ],
       "output": "backend_unions"
     },
     {
@@ -163,7 +174,9 @@
         "Define result types",
         "Export utilities (isSuccess, isFailure)"
       ],
-      "depends_on": [4],
+      "depends_on": [
+        4
+      ],
       "output": "validation_type"
     },
     {
@@ -179,7 +192,9 @@
         "Create src/types/index.ts",
         "Export all types"
       ],
-      "depends_on": [5],
+      "depends_on": [
+        5
+      ],
       "output": "type_barrel"
     },
     {
@@ -198,7 +213,9 @@
         "Apply branded types",
         "Maintain backward compatibility"
       ],
-      "depends_on": [6],
+      "depends_on": [
+        6
+      ],
       "output": "installer_types_updated"
     },
     {
@@ -214,7 +231,9 @@
         "Import union types",
         "Apply to config parameter"
       ],
-      "depends_on": [7],
+      "depends_on": [
+        7
+      ],
       "output": "backend_types_updated"
     },
     {
@@ -229,16 +248,19 @@
         "Compile entire project",
         "Verify no type errors"
       ],
-      "depends_on": [8],
+      "depends_on": [
+        8
+      ],
       "output": "compilation_verified"
     }
   ],
-
   "pre_analysis": [
     {
       "step": "load_context_package",
       "action": "Load context for type analysis",
-      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"
+      ],
       "output_to": "context_package",
       "on_error": "fail"
     },
@@ -268,7 +290,6 @@
       "output_to": "step_ops_decomposed"
     }
   ],
-
   "artifacts": [
     {
       "type": "feature_spec",
@@ -287,14 +308,12 @@
       "usage": "SME analysis for type patterns"
     }
   ],
-
   "inherited": {
     "from": "IMPL-001",
     "context": [
       "ValidationResult<T> pattern from error hierarchy design"
     ]
   },
-
   "test": {
     "commands": {
       "run_tests": "npx tsx --test src/types/*.test.ts",
@@ -313,7 +332,6 @@
       "Zero type errors in strict mode"
     ]
   },
-
   "risks": [
     {
       "description": "Branded types add complexity for minimal runtime benefit",
@@ -334,7 +352,6 @@
       "mitigation": "Constructors are opt-in; direct string still works"
     }
   ],
-
   "code_skeleton": {
     "interfaces": [
       {
@@ -366,7 +383,6 @@
       }
     ]
   },
-
   "meta": {
     "type": "enhancement",
     "agent": "@code-developer",
@@ -378,17 +394,25 @@
       "enable_resume": false
     }
   },
-
   "cli_execution": {
     "id": "WFS-arch-analysis-IMPL-006",
     "strategy": "merge_fork",
-    "merge_from": ["WFS-arch-analysis-IMPL-001", "WFS-arch-analysis-IMPL-003"]
+    "merge_from": [
+      "WFS-arch-analysis-IMPL-001",
+      "WFS-arch-analysis-IMPL-003"
+    ]
   },
-
   "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
   "source": {
     "tool": "workflow-plan",
     "session_id": "WFS-arch-analysis",
     "feature_id": "F-005"
-  }
+  },
+  "status_history": [
+    {
+      "from": "in_progress",
+      "to": "completed",
+      "changed_at": "2026-04-23T17:53:25+08:00"
+    }
+  ]
 }

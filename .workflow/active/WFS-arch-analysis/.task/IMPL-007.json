@@ -2,20 +2,26 @@
   "id": "IMPL-007",
   "title": "Apply immutability to data models",
   "description": "Apply readonly to WorkflowSpec, Story, Step, and Context types. Use ReadonlyArray and Readonly<Record> for collections. Create Mutable<T> variant for internal DB construction only. Apply spread-based updates instead of mutation. Application order: WorkflowSpec > Story > Step > Context. Depends on F-001 and F-005.",
-  "status": "pending",
+  "status": "completed",
   "type": "refactor",
   "action": "Refactor",
   "priority": "medium",
   "effort": "medium",
-  "scope": ["src/installer/types.ts", "src/types/immutable.ts", "src/installer/step-lifecycle.ts"],
+  "scope": [
+    "src/installer/types.ts",
+    "src/types/immutable.ts",
+    "src/installer/step-lifecycle.ts"
+  ],
   "focus_paths": [
     "src/installer/types.ts",
     "src/installer/step-ops/",
     "src/db.ts"
   ],
-  "depends_on": ["IMPL-003", "IMPL-006"],
+  "depends_on": [
+    "IMPL-003",
+    "IMPL-006"
+  ],
   "parallel_group": 4,
-
   "convergence": {
     "criteria": [
       "Mutable<T> utility type defined",
@@ -29,7 +35,6 @@
     "verification": "npx tsc --noEmit && grep -c 'readonly' src/installer/types.ts >= 10",
     "definition_of_done": "Core data models are immutable with clear mutation boundaries"
   },
-
   "files": [
     {
       "path": "src/types/immutable.ts",
@@ -74,7 +79,6 @@
       "change": "Use Mutable<T> for row construction"
     }
   ],
-
   "implementation": [
     {
       "step": 1,
@@ -109,7 +113,9 @@
         "Add readonly to all fields",
         "Update WorkflowAgent similarly"
       ],
-      "depends_on": [1],
+      "depends_on": [
+        1
+      ],
       "output": "workflow_spec_immutable"
     },
     {
@@ -125,7 +131,9 @@
         "Update Story interface",
         "Add readonly throughout"
       ],
-      "depends_on": [2],
+      "depends_on": [
+        2
+      ],
       "output": "story_immutable"
     },
     {
@@ -140,7 +148,9 @@
         "Update WorkflowStep interface",
         "Propagate readonly requirements"
       ],
-      "depends_on": [3],
+      "depends_on": [
+        3
+      ],
       "output": "step_immutable"
     },
     {
@@ -159,7 +169,9 @@
         "Convert to spread: { ...context, key: value }",
         "Verify behavior unchanged"
       ],
-      "depends_on": [4],
+      "depends_on": [
+        4
+      ],
       "output": "mutations_converted"
     },
     {
@@ -176,7 +188,9 @@
         "Use Mutable<Story> for row building",
         "Return as Story (readonly)"
       ],
-      "depends_on": [5],
+      "depends_on": [
+        5
+      ],
       "output": "db_updated"
     },
     {
@@ -193,16 +207,19 @@
         "Run all tests",
         "Address issues"
       ],
-      "depends_on": [6],
+      "depends_on": [
+        6
+      ],
       "output": "verification_complete"
     }
   ],
-
   "pre_analysis": [
     {
       "step": "load_context_package",
       "action": "Load context for immutability analysis",
-      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"
+      ],
       "output_to": "context_package",
       "on_error": "fail"
     },
@@ -238,7 +255,6 @@
       "output_to": "branded_types"
     }
   ],
-
   "artifacts": [
     {
       "type": "feature_spec",
@@ -257,14 +273,12 @@
       "usage": "SME analysis for immutability patterns"
     }
   ],
-
   "inherited": {
     "from": "IMPL-003",
     "context": [
       "Decomposed step-ops modules with clear boundaries"
     ]
   },
-
   "test": {
     "commands": {
       "run_tests": "npm test",
@@ -283,7 +297,6 @@
       "Mutation sites converted"
     ]
   },
-
   "risks": [
     {
       "description": "High-churn context object may cause performance issues with spread",
@@ -304,7 +317,6 @@
       "mitigation": "Comprehensive search in pre-analysis; fix as found"
     }
   ],
-
   "code_skeleton": {
     "interfaces": [
       {
@@ -321,7 +333,6 @@
       }
     ]
   },
-
   "meta": {
     "type": "refactor",
     "agent": "@code-developer",
@@ -333,17 +344,25 @@
       "enable_resume": false
     }
   },
-
   "cli_execution": {
     "id": "WFS-arch-analysis-IMPL-007",
     "strategy": "merge_fork",
-    "merge_from": ["WFS-arch-analysis-IMPL-003", "WFS-arch-analysis-IMPL-006"]
+    "merge_from": [
+      "WFS-arch-analysis-IMPL-003",
+      "WFS-arch-analysis-IMPL-006"
+    ]
   },
-
   "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
   "source": {
     "tool": "workflow-plan",
     "session_id": "WFS-arch-analysis",
     "feature_id": "F-006"
-  }
+  },
+  "status_history": [
+    {
+      "from": "in_progress",
+      "to": "completed",
+      "changed_at": "2026-04-23T17:57:28+08:00"
+    }
+  ]
 }

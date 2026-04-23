@@ -1,7 +1,7 @@
 export type WorkflowAgentFiles = {
-  baseDir: string;
-  files: Record<string, string>;
-  skills?: string[];
+  readonly baseDir: string;
+  readonly files: Readonly<Record<string, string>>;
+  readonly skills?: ReadonlyArray<string>;
 };
 
 /**
@@ -17,102 +17,102 @@ export type WorkflowAgentFiles = {
 export type AgentRole = "analysis" | "coding" | "verification" | "testing" | "pr" | "scanning";
 
 export type WorkflowAgent = {
-  id: string;
-  name?: string;
-  description?: string;
-  role?: AgentRole;
-  model?: string;
-  pollingModel?: string;
-  timeoutSeconds?: number;
-  backend?: "openclaw" | "hermes" | "claude-code" | "codex";
-  workspace: WorkflowAgentFiles;
+  readonly id: string;
+  readonly name?: string;
+  readonly description?: string;
+  readonly role?: AgentRole;
+  readonly model?: string;
+  readonly pollingModel?: string;
+  readonly timeoutSeconds?: number;
+  readonly backend?: "openclaw" | "hermes" | "claude-code" | "codex";
+  readonly workspace: WorkflowAgentFiles;
 };
 
 export type PollingConfig = {
-  model?: string;
-  timeoutSeconds?: number;
+  readonly model?: string;
+  readonly timeoutSeconds?: number;
 };
 
 export type WorkflowStepFailure = {
-  retry_step?: string;
-  max_retries?: number;
-  on_exhausted?: { escalate_to: string } | { escalate_to?: string } | undefined;
-  escalate_to?: string;
+  readonly retry_step?: string;
+  readonly max_retries?: number;
+  readonly on_exhausted?: { readonly escalate_to: string } | { readonly escalate_to?: string } | undefined;
+  readonly escalate_to?: string;
 };
 
 export type LoopConfig = {
-  over: "stories";
-  completion: "all_done";
-  freshSession?: boolean;
-  verifyEach?: boolean;
-  verifyStep?: string;
+  readonly over: "stories";
+  readonly completion: "all_done";
+  readonly freshSession?: boolean;
+  readonly verifyEach?: boolean;
+  readonly verifyStep?: string;
 };
 
 export type WorkflowStep = {
-  id: string;
-  agent: string;
-  type?: "single" | "loop";
-  loop?: LoopConfig;
-  input: string;
-  expects: string;
-  max_retries?: number;
-  on_fail?: WorkflowStepFailure;
+  readonly id: string;
+  readonly agent: string;
+  readonly type?: "single" | "loop";
+  readonly loop?: LoopConfig;
+  readonly input: string;
+  readonly expects: string;
+  readonly max_retries?: number;
+  readonly on_fail?: WorkflowStepFailure;
 };
 
 export type Story = {
-  id: string;
-  runId: string;
-  storyIndex: number;
-  storyId: string;
-  title: string;
-  description: string;
-  acceptanceCriteria: string[];
-  status: "pending" | "running" | "done" | "failed";
-  output?: string;
-  retryCount: number;
-  maxRetries: number;
+  readonly id: string;
+  readonly runId: string;
+  readonly storyIndex: number;
+  readonly storyId: string;
+  readonly title: string;
+  readonly description: string;
+  readonly acceptanceCriteria: ReadonlyArray<string>;
+  readonly status: "pending" | "running" | "done" | "failed";
+  readonly output?: string;
+  readonly retryCount: number;
+  readonly maxRetries: number;
 };
 
 export type WorkflowSpec = {
-  id: string;
-  name?: string;
-  version?: number;
-  defaultBackend?: "openclaw" | "hermes" | "claude-code" | "codex";
-  polling?: PollingConfig;
-  agents: WorkflowAgent[];
-  steps: WorkflowStep[];
-  context?: Record<string, string>;
-  notifications?: {
-    url?: string;
+  readonly id: string;
+  readonly name?: string;
+  readonly version?: number;
+  readonly defaultBackend?: "openclaw" | "hermes" | "claude-code" | "codex";
+  readonly polling?: PollingConfig;
+  readonly agents: ReadonlyArray<WorkflowAgent>;
+  readonly steps: ReadonlyArray<WorkflowStep>;
+  readonly context?: Readonly<Record<string, string>>;
+  readonly notifications?: {
+    readonly url?: string;
   };
 };
 
 export type WorkflowInstallResult = {
-  workflowId: string;
-  workflowDir: string;
+  readonly workflowId: string;
+  readonly workflowDir: string;
 };
 
 export type StepResult = {
-  stepId: string;
-  agentId: string;
-  output: string;
-  status: "done" | "retry" | "blocked";
-  completedAt: string;
+  readonly stepId: string;
+  readonly agentId: string;
+  readonly output: string;
+  readonly status: "done" | "retry" | "blocked";
+  readonly completedAt: string;
 };
 
 export type WorkflowRunRecord = {
-  id: string;
-  workflowId: string;
-  workflowName?: string;
-  taskTitle: string;
-  status: "running" | "paused" | "blocked" | "completed" | "canceled";
-  leadAgentId: string;
-  leadSessionLabel: string;
-  currentStepIndex: number;
-  currentStepId?: string;
-  stepResults: StepResult[];
-  retryCount: number;
-  context: Record<string, string>;
-  createdAt: string;
-  updatedAt: string;
+  readonly id: string;
+  readonly workflowId: string;
+  readonly workflowName?: string;
+  readonly taskTitle: string;
+  readonly status: "running" | "paused" | "blocked" | "completed" | "canceled";
+  readonly leadAgentId: string;
+  readonly leadSessionLabel: string;
+  readonly currentStepIndex: number;
+  readonly currentStepId?: string;
+  readonly stepResults: ReadonlyArray<StepResult>;
+  readonly retryCount: number;
+  readonly context: Readonly<Record<string, string>>;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 };
