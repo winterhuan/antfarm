@@ -2,12 +2,16 @@
   "id": "IMPL-002",
   "title": "Create standardized test patterns and utilities",
   "description": "Implement test data builders (buildWorkflowSpec, buildStory, buildRunRecord, buildBackendSpy), CLI test harness with process.exit/stdout/stderr interception, and database fixtures (createRunWithSteps, createCompletedRun, createFailedStep). Zero new dependencies using node:test + node:assert/strict only. This is Phase 1 foundation task blocking F-007.",
-  "status": "pending",
+  "status": "completed",
   "type": "testing",
   "action": "Create",
   "priority": "high",
   "effort": "medium",
-  "scope": ["tests/helpers/", "tests/helpers/builders.ts", "tests/helpers/cli-harness.ts"],
+  "scope": [
+    "tests/helpers/",
+    "tests/helpers/builders.ts",
+    "tests/helpers/cli-harness.ts"
+  ],
   "focus_paths": [
     "tests/helpers/",
     "tests/test-db.ts",
@@ -15,7 +19,6 @@
   ],
   "depends_on": [],
   "parallel_group": 1,
-
   "convergence": {
     "criteria": [
       "tests/helpers/builders.ts exists with 6 builder functions",
@@ -28,7 +31,6 @@
     "verification": "npx tsx --test --dry-run tests/helpers/builders.test.ts tests/helpers/cli-harness.test.ts",
     "definition_of_done": "Test utilities are available and ready for use in F-001 through F-007"
   },
-
   "files": [
     {
       "path": "tests/helpers/builders.ts",
@@ -61,7 +63,6 @@
       "change": "createWorkspaceDir for filesystem tests"
     }
   ],
-
   "implementation": [
     {
       "step": 1,
@@ -100,7 +101,9 @@
         "Export harness with captured output",
         "Implement restore/cleanup"
       ],
-      "depends_on": [1],
+      "depends_on": [
+        1
+      ],
       "output": "cli_harness"
     },
     {
@@ -117,7 +120,9 @@
         "Add fixture functions",
         "Update exports"
       ],
-      "depends_on": [2],
+      "depends_on": [
+        2
+      ],
       "output": "db_fixtures"
     },
     {
@@ -132,7 +137,9 @@
         "Implement directory creation with file content",
         "Export utility"
       ],
-      "depends_on": [3],
+      "depends_on": [
+        3
+      ],
       "output": "workspace_fixture"
     },
     {
@@ -149,16 +156,19 @@
         "Create cli-harness.test.ts",
         "Run tests to verify"
       ],
-      "depends_on": [4],
+      "depends_on": [
+        4
+      ],
       "output": "utility_tests"
     }
   ],
-
   "pre_analysis": [
     {
       "step": "load_context_package",
       "action": "Load context package for types and existing test structure",
-      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"
+      ],
       "output_to": "context_package",
       "on_error": "fail"
     },
@@ -181,7 +191,6 @@
       "output_to": "type_definitions"
     }
   ],
-
   "artifacts": [
     {
       "type": "feature_spec",
@@ -192,7 +201,6 @@
       "usage": "Test pattern specifications and builder designs"
     }
   ],
-
   "test": {
     "commands": {
       "run_tests": "npx tsx --test tests/helpers/builders.test.ts tests/helpers/cli-harness.test.ts",
@@ -213,7 +221,6 @@
       "3 fixture functions tested"
     ]
   },
-
   "risks": [
     {
       "description": "CLI harness process.exit interception may not work in all Node.js versions",
@@ -229,7 +236,6 @@
       "mitigation": "Design for extension; document customization patterns"
     }
   ],
-
   "code_skeleton": {
     "interfaces": [
       {
@@ -251,7 +257,6 @@
       }
     ]
   },
-
   "meta": {
     "type": "testing",
     "agent": "@code-developer",
@@ -263,16 +268,21 @@
       "enable_resume": false
     }
   },
-
   "cli_execution": {
     "id": "WFS-arch-analysis-IMPL-002",
     "strategy": "new"
   },
-
   "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
   "source": {
     "tool": "workflow-plan",
     "session_id": "WFS-arch-analysis",
     "feature_id": "F-008"
-  }
+  },
+  "status_history": [
+    {
+      "from": "pending",
+      "to": "completed",
+      "changed_at": "2026-04-23T16:44:24+08:00"
+    }
+  ]
 }
