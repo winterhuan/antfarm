@@ -1,0 +1,349 @@
+{
+  "id": "IMPL-007",
+  "title": "Apply immutability to data models",
+  "description": "Apply readonly to WorkflowSpec, Story, Step, and Context types. Use ReadonlyArray and Readonly<Record> for collections. Create Mutable<T> variant for internal DB construction only. Apply spread-based updates instead of mutation. Application order: WorkflowSpec > Story > Step > Context. Depends on F-001 and F-005.",
+  "status": "pending",
+  "type": "refactor",
+  "action": "Refactor",
+  "priority": "medium",
+  "effort": "medium",
+  "scope": ["src/installer/types.ts", "src/types/immutable.ts", "src/installer/step-lifecycle.ts"],
+  "focus_paths": [
+    "src/installer/types.ts",
+    "src/installer/step-ops/",
+    "src/db.ts"
+  ],
+  "depends_on": ["IMPL-003", "IMPL-006"],
+  "parallel_group": 4,
+
+  "convergence": {
+    "criteria": [
+      "Mutable<T> utility type defined",
+      "WorkflowSpec marked readonly throughout",
+      "Story type marked readonly throughout",
+      "Step type marked readonly throughout",
+      "Context maps use Readonly<Record>",
+      "5 mutation sites converted to spread-based updates",
+      "DB construction uses Mutable<T> where needed"
+    ],
+    "verification": "npx tsc --noEmit && grep -c 'readonly' src/installer/types.ts >= 10",
+    "definition_of_done": "Core data models are immutable with clear mutation boundaries"
+  },
+
+  "files": [
+    {
+      "path": "src/types/immutable.ts",
+      "action": "create",
+      "target": "Immutability utilities",
+      "change": "Mutable<T> type, DeepReadonly<T>, freeze helper"
+    },
+    {
+      "path": "src/installer/types.ts",
+      "action": "modify",
+      "target": "WorkflowSpec",
+      "change": "readonly on all fields, ReadonlyArray for agents/steps"
+    },
+    {
+      "path": "src/installer/types.ts",
+      "action": "modify",
+      "target": "Story",
+      "change": "readonly on all fields, readonly string[] for acceptanceCriteria"
+    },
+    {
+      "path": "src/installer/types.ts",
+      "action": "modify",
+      "target": "WorkflowStep",
+      "change": "readonly on all fields"
+    },
+    {
+      "path": "src/installer/types.ts",
+      "action": "modify",
+      "target": "Context types",
+      "change": "Readonly<Record<string, string>>"
+    },
+    {
+      "path": "src/installer/step-lifecycle.ts",
+      "action": "modify",
+      "target": "Context mutation sites",
+      "change": "Convert 5 mutations to spread-based updates"
+    },
+    {
+      "path": "src/db.ts",
+      "action": "modify",
+      "target": "DB construction",
+      "change": "Use Mutable<T> for row construction"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Define immutability utilities",
+      "description": "Create helper types for mutation control",
+      "modification_points": [
+        "Mutable<T> removes readonly recursively",
+        "DeepReadonly<T> adds readonly recursively",
+        "freeze() helper for Object.freeze"
+      ],
+      "logic_flow": [
+        "Create src/types/immutable.ts",
+        "Define utility types",
+        "Export helpers"
+      ],
+      "depends_on": [],
+      "output": "utility_types"
+    },
+    {
+      "step": 2,
+      "title": "Apply readonly to WorkflowSpec",
+      "description": "Make workflow spec immutable",
+      "modification_points": [
+        "readonly id: WorkflowId",
+        "readonly name?: string",
+        "readonly agents: ReadonlyArray<WorkflowAgent>",
+        "readonly steps: ReadonlyArray<WorkflowStep>",
+        "readonly context?: Readonly<Record<string, string>>"
+      ],
+      "logic_flow": [
+        "Update WorkflowSpec interface",
+        "Add readonly to all fields",
+        "Update WorkflowAgent similarly"
+      ],
+      "depends_on": [1],
+      "output": "workflow_spec_immutable"
+    },
+    {
+      "step": 3,
+      "title": "Apply readonly to Story",
+      "description": "Make story type immutable",
+      "modification_points": [
+        "readonly on all primitive fields",
+        "readonly string[] for acceptanceCriteria",
+        "readonly on optional fields"
+      ],
+      "logic_flow": [
+        "Update Story interface",
+        "Add readonly throughout"
+      ],
+      "depends_on": [2],
+      "output": "story_immutable"
+    },
+    {
+      "step": 4,
+      "title": "Apply readonly to WorkflowStep",
+      "description": "Make step type immutable",
+      "modification_points": [
+        "readonly on all fields",
+        "Update dependent types"
+      ],
+      "logic_flow": [
+        "Update WorkflowStep interface",
+        "Propagate readonly requirements"
+      ],
+      "depends_on": [3],
+      "output": "step_immutable"
+    },
+    {
+      "step": 5,
+      "title": "Convert context mutations to spread updates",
+      "description": "Find and fix 5 mutation sites",
+      "modification_points": [
+        "Site 1: claimStep context building",
+        "Site 2: completeStep output parsing",
+        "Site 3: failStep error handling",
+        "Site 4: advancePipeline state",
+        "Site 5: loop iteration context"
+      ],
+      "logic_flow": [
+        "Search for mutation patterns",
+        "Convert to spread: { ...context, key: value }",
+        "Verify behavior unchanged"
+      ],
+      "depends_on": [4],
+      "output": "mutations_converted"
+    },
+    {
+      "step": 6,
+      "title": "Update DB construction",
+      "description": "Use Mutable<T> for database row building",
+      "modification_points": [
+        "DB insert functions build Mutable objects",
+        "Freeze after construction if needed",
+        "Type cast to readonly for return"
+      ],
+      "logic_flow": [
+        "Update db.ts type annotations",
+        "Use Mutable<Story> for row building",
+        "Return as Story (readonly)"
+      ],
+      "depends_on": [5],
+      "output": "db_updated"
+    },
+    {
+      "step": 7,
+      "title": "Verify compilation and tests",
+      "description": "Ensure immutability doesn't break functionality",
+      "modification_points": [
+        "Run tsc --noEmit",
+        "Run test suite",
+        "Fix any type errors"
+      ],
+      "logic_flow": [
+        "Compile project",
+        "Run all tests",
+        "Address issues"
+      ],
+      "depends_on": [6],
+      "output": "verification_complete"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context for immutability analysis",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-006 immutability analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/system-architect/analysis-F-006-immutable-data-models.md')",
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/subject-matter-expert/analysis-F-006-immutable-data-models.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "identify_mutation_sites",
+      "action": "Find context mutation patterns in step-ops",
+      "commands": [
+        "bash('rg \"context\\[\\\" /home/maiscrm/workspace/antfarm/src/installer/step-ops.ts -n')",
+        "bash('rg \"\\.status\\s*=\" /home/maiscrm/workspace/antfarm/src/installer/step-ops.ts -n')"
+      ],
+      "output_to": "mutation_sites"
+    },
+    {
+      "step": "inherit_from_step_ops",
+      "action": "Use decomposed step-ops from IMPL-003",
+      "commands": [],
+      "output_to": "step_ops_decomposed"
+    },
+    {
+      "step": "inherit_from_types",
+      "action": "Use branded types from IMPL-006",
+      "commands": [],
+      "output_to": "branded_types"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/system-architect/analysis-F-006-immutable-data-models.md",
+      "feature_id": "F-006",
+      "priority": "highest",
+      "usage": "Immutability application strategy and mutation sites"
+    },
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/subject-matter-expert/analysis-F-006-immutable-data-models.md",
+      "feature_id": "F-006",
+      "priority": "high",
+      "usage": "SME analysis for immutability patterns"
+    }
+  ],
+
+  "inherited": {
+    "from": "IMPL-003",
+    "context": [
+      "Decomposed step-ops modules with clear boundaries"
+    ]
+  },
+
+  "test": {
+    "commands": {
+      "run_tests": "npm test",
+      "type_check": "npx tsc --noEmit"
+    },
+    "unit": [
+      "Type system prevents direct mutation",
+      "Spread updates produce correct values",
+      "DB construction works with Mutable<T>",
+      "All existing tests pass"
+    ],
+    "coverage_target": 85,
+    "success_metrics": [
+      "Zero type errors",
+      "All tests pass",
+      "Mutation sites converted"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "High-churn context object may cause performance issues with spread",
+      "probability": "Low",
+      "impact": "Low",
+      "mitigation": "Measure before optimizing; immutability usually not a bottleneck"
+    },
+    {
+      "description": "DB UPDATE operations inherently mutable - type system can't enforce",
+      "probability": "High",
+      "impact": "Low",
+      "mitigation": "Document boundary; don't add complexity"
+    },
+    {
+      "description": "Mutation sites may be more than identified 5",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Comprehensive search in pre-analysis; fix as found"
+    }
+  ],
+
+  "code_skeleton": {
+    "interfaces": [
+      {
+        "name": "Mutable<T>",
+        "definition": "{ -readonly [K in keyof T]: Mutable<T[K]> }",
+        "purpose": "Remove readonly for construction"
+      }
+    ],
+    "key_functions": [
+      {
+        "signature": "function mergeContext(context: Readonly<Record<string, string>>, parsed: Readonly<Record<string, string>>): Record<string, string>",
+        "purpose": "Immutable context merge",
+        "returns": "New context object"
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "refactor",
+    "agent": "@code-developer",
+    "execution_group": "phase-4-parallel",
+    "module": "installer",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    }
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-007",
+    "strategy": "merge_fork",
+    "merge_from": ["WFS-arch-analysis-IMPL-003", "WFS-arch-analysis-IMPL-006"]
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-006"
+  }
+}

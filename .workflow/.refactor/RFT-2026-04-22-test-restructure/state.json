@@ -1,0 +1,182 @@
+{
+  "session_id": "RFT-2026-04-22-test-restructure",
+  "target": "重构整个项目的测试结构，整理混乱的测试文件",
+  "scope": "project",
+  "started": "2026-04-22T10:00:00Z",
+  "phase": "explored",
+  "exploration": {
+    "structure": {
+      "test_locations": {
+        "tests/": { "files": 29, "lines": 3192, "type": "integration/e2e" },
+        "src/": { "files": 22, "lines": 2533, "type": "unit (co-located)" },
+        "landing/__tests__/": { "files": 1, "type": "frontend" }
+      },
+      "total_files": 52,
+      "total_lines": 5725
+    },
+    "metrics": {
+      "largest_files": [
+        "tests/peek-step-polling.test.ts (290 lines)",
+        "tests/terminal-state-guards.test.ts (250 lines)",
+        "tests/external-skills.test.ts (239 lines)",
+        "tests/gateway-password-auth.test.ts (235 lines)",
+        "tests/gateway-api-model.test.ts (195 lines)"
+      ]
+    },
+    "import_patterns": {
+      "tests/_importing_dist": 21,
+      "tests/_importing_src_directly": 1,
+      "src/_importing_dist": 0,
+      "framework": "node:test + node:assert/strict",
+      "missing_node:test": ["tests/model-field-preservation.test.ts", "tests/terminal-state-guards.test.ts"]
+    },
+    "test_mapping": {
+      "no_test_script": true,
+      "no_test_runner_config": true,
+      "tsconfig_excludes_tests": "tests/ not in tsconfig include"
+    },
+    "pattern_violations": {
+      "as_any_usage": ["tests/external-skills.test.ts", "tests/gateway-api-model.test.ts"],
+      "no_shared_helpers": true,
+      "inconsistent_import_source": "tests/ imports from dist/, 1 file imports from src/"
+    },
+    "_metadata": { "files_analyzed": 52, "timestamp": "2026-04-22T10:15:00Z" }
+  },
+  "debt_items": [
+    {
+      "id": "D-001",
+      "dimension": "architecture",
+      "title": "tests/ 全部从 dist/ 导入 — 依赖编译产物",
+      "location": "tests/ (21 of 29 files)",
+      "severity": "high",
+      "description": "tests/ 目录下 21/29 个测试文件从 ../dist/ 导入源码。这要求运行测试前必须先编译 (npm run build)，且无法直接运行 TypeScript 测试。有 1 个文件 (frontend-detect.test.ts) 直接从 ../src/ 导入，风格不一致。",
+      "suggested_fix": "统一测试导入方式：要么全部从 src/ 导入（需要 tsx/ts-node 运行），要么配置 tsconfig 让测试也能被编译",
+      "impact": 5,
+      "effort": 3,
+      "priority_score": 15,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-002",
+      "dimension": "architecture",
+      "title": "没有 test 脚本 — package.json 缺少测试命令",
+      "location": "package.json",
+      "severity": "critical",
+      "description": "package.json scripts 中没有 test 命令。无法通过 npm test 运行测试。开发者必须手动 node --test 运行各个文件或用 glob 模式。",
+      "suggested_fix": "添加 test 脚本：\"test\": \"node --test src/**/*.test.ts tests/**/*.test.ts\" 或使用 tsx 运行",
+      "impact": 5,
+      "effort": 1,
+      "priority_score": 25,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-003",
+      "dimension": "architecture",
+      "title": "tsconfig.json 不包含 tests/ 目录 — 类型不安全",
+      "location": "tsconfig.json",
+      "severity": "high",
+      "description": "tsconfig.json 的 include 只含 src/**/*.ts，tests/ 目录完全不在 TypeScript 编译检查范围内。tests/ 下的 .ts 文件得不到类型检查保护。",
+      "suggested_fix": "创建 tsconfig.test.json extends 基础配置，或添加 tests/ 到 include",
+      "impact": 4,
+      "effort": 2,
+      "priority_score": 16,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-004",
+      "dimension": "maintainability",
+      "title": "2个测试文件缺少 node:test 导入 — 框架不一致",
+      "location": "tests/model-field-preservation.test.ts, tests/terminal-state-guards.test.ts",
+      "severity": "medium",
+      "description": "model-field-preservation.test.ts 和 terminal-state-guards.test.ts 不使用 describe/it 模式，而是直接执行断言或手动组织测试。与其余 50 个使用 node:test 的文件风格不同。",
+      "suggested_fix": "将这 2 个文件改写为使用 node:test 的 describe/it 模式",
+      "impact": 2,
+      "effort": 2,
+      "priority_score": 8,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-005",
+      "dimension": "test_gaps",
+      "title": "没有共享测试工具函数 — 大量重复的 setup/teardown 代码",
+      "location": "tests/ (multiple files)",
+      "severity": "medium",
+      "description": "多个测试文件有重复的临时目录创建、环境变量管理、mock setup 代码。如 external-skills.test.ts 和 frontend-e2e.test.ts 都有类似的 beforeEach/afterEach tmpDir + HOME 模式。",
+      "suggested_fix": "创建 tests/helpers/ 目录，提取共享的 test fixtures, setup utilities, mock factories",
+      "impact": 3,
+      "effort": 3,
+      "priority_score": 9,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-006",
+      "dimension": "code_quality",
+      "title": "tests/ 中大量 as any 类型断言 — 缺乏类型安全",
+      "location": "tests/external-skills.test.ts (5处), tests/gateway-api-model.test.ts (5处)",
+      "severity": "medium",
+      "description": "external-skills.test.ts 和 gateway-api-model.test.ts 大量使用 as any 来绕过类型检查。这降低了测试的可靠性，重构源码时这些测试不会报错。",
+      "suggested_fix": "创建正确的类型 mock 工厂函数，替换 as any 断言",
+      "impact": 2,
+      "effort": 2,
+      "priority_score": 8,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-007",
+      "dimension": "architecture",
+      "title": "tests/ 与 src/ 测试定位不清晰 — 职责划分模糊",
+      "location": "project-wide",
+      "severity": "medium",
+      "description": "tests/ 下混杂了单元测试（如 polling-prompt.test.ts 测单个函数）和集成测试（如 frontend-e2e.test.ts）。src/ 下的测试也有类似问题。没有明确的分层策略来区分 unit/integration/e2e。",
+      "suggested_fix": "明确分层：src/**/*.test.ts = 单元测试，tests/unit/ = 跨模块单元测试，tests/integration/ = 集成测试，tests/e2e/ = 端到端测试",
+      "impact": 4,
+      "effort": 4,
+      "priority_score": 8,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    },
+    {
+      "id": "D-008",
+      "dimension": "dependencies",
+      "title": "landing/__tests__/ 孤立 — 与主项目测试无关",
+      "location": "landing/__tests__/",
+      "severity": "low",
+      "description": "landing/ 目录下有 1 个独立测试文件，但 landing/ 可能有自己的 package.json 和框架配置。与主项目测试体系完全独立。",
+      "suggested_fix": "确认 landing/ 是否独立项目；若是，保持独立即可；若不是，纳入统一测试结构",
+      "impact": 1,
+      "effort": 1,
+      "priority_score": 5,
+      "status": "discovered",
+      "refactor_plan": null,
+      "validation_result": null
+    }
+  ],
+  "queue": ["D-002", "D-003", "D-001", "D-005", "D-004", "D-006", "D-007", "D-008"],
+  "current_item": null,
+  "completed_items": ["D-002"],
+  "skipped_items": [],
+  "baseline": {
+    "test_pass_rate": 86.9,
+    "test_count": 191,
+    "test_passed": 166,
+    "test_failed": 22,
+    "test_cancelled": 3,
+    "diagnostic_errors": 0,
+    "diagnostic_warnings": 0,
+    "timestamp": "2026-04-22T10:20:00Z"
+  },
+  "summary": null
+}

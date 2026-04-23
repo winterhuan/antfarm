@@ -10,7 +10,7 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { loadWorkflowSpec } from "../dist/installer/workflow-spec.js";
+import { loadWorkflowSpec } from "../src/installer/workflow-spec.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 

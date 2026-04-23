@@ -1,13 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { logger, readRecentLogs, log, formatEntry } from "../dist/lib/logger.js";
+import { logger, readRecentLogs, log, formatEntry } from "../src/lib/logger.js";
 
 describe("US-002: Logger caller integration", () => {
   it("logger.info returns void (not a Promise)", () => {
     const result = logger.info("caller integration test - info");
     // Synchronous API: should return undefined, not a Promise
     assert.equal(result, undefined);
-    assert.equal(result instanceof Promise, false);
+    // void return — not a Promise
+    assert.equal(typeof result === "undefined", true);
   });
 
   it("logger.warn returns void", () => {

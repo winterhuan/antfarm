@@ -13,7 +13,7 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseOutputKeyValues } from "../dist/installer/step-ops.js";
+import { parseOutputKeyValues } from "../src/installer/step-ops.js";
 
 describe("parseOutputKeyValues — multi-line output parsing", () => {
 

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildPollingPrompt } from "../dist/installer/agent-cron.js";
+import { buildPollingPrompt } from "../src/installer/agent-cron.js";
 
 describe("buildPollingPrompt", () => {
   it("contains the step claim command with correct agent id", () => {

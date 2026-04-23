@@ -1,0 +1,463 @@
+{
+  "id": "IMPL-005",
+  "title": "Extract CLI commands into registry pattern",
+  "description": "Refactor 770-line cli.ts into CommandHandler interface + registry dispatch. Create src/cli/commands/*.ts for each command group (version, install, uninstall, dashboard, medic, step, logs, workflow). Extract shared utilities to src/cli/utils.ts. Implement createCliHarness() test pattern. Depends on F-004 error hierarchy.",
+  "status": "pending",
+  "type": "refactor",
+  "action": "Refactor",
+  "priority": "high",
+  "effort": "large",
+  "scope": ["src/cli/", "src/cli/commands/", "src/cli/registry.ts", "src/cli/utils.ts"],
+  "focus_paths": [
+    "src/cli/cli.ts",
+    "src/cli/ant.ts"
+  ],
+  "depends_on": ["IMPL-001"],
+  "parallel_group": 3,
+
+  "convergence": {
+    "criteria": [
+      "CommandHandler interface defined in src/cli/command-handler.ts",
+      "8 command files created in src/cli/commands/*.ts",
+      "Registry dispatch in src/cli/registry.ts",
+      "Shared utilities in src/cli/utils.ts",
+      "37 command + registry tests pass",
+      "main() function reduced to <50 lines",
+      "Zero breaking changes to CLI interface"
+    ],
+    "verification": "npm test -- cli && node src/cli/ant.ts --version",
+    "definition_of_done": "CLI refactored into registry pattern with per-command testability"
+  },
+
+  "files": [
+    {
+      "path": "src/cli/command-handler.ts",
+      "action": "create",
+      "target": "Command types",
+      "change": "CommandContext and CommandHandler interfaces"
+    },
+    {
+      "path": "src/cli/registry.ts",
+      "action": "create",
+      "target": "Registry",
+      "change": "registerCommand, dispatchCommand functions"
+    },
+    {
+      "path": "src/cli/utils.ts",
+      "action": "create",
+      "target": "Shared utilities",
+      "change": "formatEventTime, parseBackendFlag, printUsage, parseArgs"
+    },
+    {
+      "path": "src/cli/commands/version.ts",
+      "action": "create",
+      "target": "Version command",
+      "change": "Handle --version, -v flags"
+    },
+    {
+      "path": "src/cli/commands/install.ts",
+      "action": "create",
+      "target": "Install command",
+      "change": "Root-level workflow install"
+    },
+    {
+      "path": "src/cli/commands/uninstall.ts",
+      "action": "create",
+      "target": "Uninstall command",
+      "change": "Root-level workflow uninstall"
+    },
+    {
+      "path": "src/cli/commands/dashboard.ts",
+      "action": "create",
+      "target": "Dashboard command",
+      "change": "Start/stop/status dashboard daemon"
+    },
+    {
+      "path": "src/cli/commands/medic.ts",
+      "action": "create",
+      "target": "Medic command",
+      "change": "Install/uninstall/run/status/log medic"
+    },
+    {
+      "path": "src/cli/commands/step.ts",
+      "action": "create",
+      "target": "Step command",
+      "change": "Peek/claim/complete/fail/stories operations"
+    },
+    {
+      "path": "src/cli/commands/logs.ts",
+      "action": "create",
+      "target": "Logs command",
+      "change": "Query/limit event logs"
+    },
+    {
+      "path": "src/cli/commands/workflow.ts",
+      "action": "create",
+      "target": "Workflow command",
+      "change": "10 workflow subcommands (~250 lines)"
+    },
+    {
+      "path": "src/cli/cli.ts",
+      "action": "modify",
+      "target": "main function",
+      "change": "Reduce to parse args + dispatch"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Define CommandHandler interface",
+      "description": "Create command types and handler contract",
+      "modification_points": [
+        "CommandContext: args, group, action, target",
+        "CommandHandler: name, description, match(ctx), execute(ctx)",
+        "Create src/cli/command-handler.ts"
+      ],
+      "logic_flow": [
+        "Define interfaces",
+        "Export types"
+      ],
+      "depends_on": [],
+      "output": "handler_interface"
+    },
+    {
+      "step": 2,
+      "title": "Create shared utilities",
+      "description": "Extract common CLI utilities",
+      "modification_points": [
+        "formatEventTime for event display",
+        "parseBackendFlag for --backend handling",
+        "printUsage for help text",
+        "parseArgs for arg parsing"
+      ],
+      "logic_flow": [
+        "Create src/cli/utils.ts",
+        "Extract utilities from cli.ts",
+        "Export functions"
+      ],
+      "depends_on": [1],
+      "output": "utils_module"
+    },
+    {
+      "step": 3,
+      "title": "Create registry",
+      "description": "Implement command registration and dispatch",
+      "modification_points": [
+        "handlers array storage",
+        "registerCommand(handler) adds to array",
+        "dispatchCommand(ctx) finds and executes handler",
+        "Print usage and exit if no match"
+      ],
+      "logic_flow": [
+        "Create src/cli/registry.ts",
+        "Implement registerCommand",
+        "Implement dispatchCommand",
+        "Export functions"
+      ],
+      "depends_on": [2],
+      "output": "registry_module"
+    },
+    {
+      "step": 4,
+      "title": "Implement version command",
+      "description": "Extract version handling",
+      "modification_points": [
+        "Match: --version, -v, version",
+        "Show package version from package.json"
+      ],
+      "logic_flow": [
+        "Create src/cli/commands/version.ts",
+        "Implement VersionHandler class",
+        "Export handler"
+      ],
+      "depends_on": [3],
+      "output": "version_command"
+    },
+    {
+      "step": 5,
+      "title": "Implement install/uninstall commands",
+      "description": "Extract root-level install commands",
+      "modification_points": [
+        "Install command: workflow path, optional backend",
+        "Uninstall command: workflow id or --all"
+      ],
+      "logic_flow": [
+        "Create install.ts and uninstall.ts",
+        "Implement handlers",
+        "Import from installer module"
+      ],
+      "depends_on": [4],
+      "output": "install_commands"
+    },
+    {
+      "step": 6,
+      "title": "Implement dashboard command",
+      "description": "Extract dashboard lifecycle commands",
+      "modification_points": [
+        "Dashboard start/stop/status subcommands",
+        "Call daemon module functions"
+      ],
+      "logic_flow": [
+        "Create dashboard.ts",
+        "Implement handler",
+        "Export handler"
+      ],
+      "depends_on": [5],
+      "output": "dashboard_command"
+    },
+    {
+      "step": 7,
+      "title": "Implement medic command",
+      "description": "Extract medic subcommands",
+      "modification_points": [
+        "Medic install/uninstall/run/status/log",
+        "90 lines of medic handling"
+      ],
+      "logic_flow": [
+        "Create medic.ts",
+        "Implement handler",
+        "Export handler"
+      ],
+      "depends_on": [6],
+      "output": "medic_command"
+    },
+    {
+      "step": 8,
+      "title": "Implement step command",
+      "description": "Extract step operations",
+      "modification_points": [
+        "Step peek/claim/complete/fail/stories",
+        "Import from step-ops module"
+      ],
+      "logic_flow": [
+        "Create step.ts",
+        "Implement handler",
+        "Export handler"
+      ],
+      "depends_on": [7],
+      "output": "step_command"
+    },
+    {
+      "step": 9,
+      "title": "Implement logs command",
+      "description": "Extract log query commands",
+      "modification_points": [
+        "Logs query with filters",
+        "Logs limit option"
+      ],
+      "logic_flow": [
+        "Create logs.ts",
+        "Implement handler",
+        "Export handler"
+      ],
+      "depends_on": [8],
+      "output": "logs_command"
+    },
+    {
+      "step": 10,
+      "title": "Implement workflow command",
+      "description": "Extract 10 workflow subcommands",
+      "modification_points": [
+        "10 subcommands: list, status, run, tick, etc.",
+        "~250 lines (largest command file, still <400)"
+      ],
+      "logic_flow": [
+        "Create workflow.ts",
+        "Extract all workflow subcommands",
+        "Export handler"
+      ],
+      "depends_on": [9],
+      "output": "workflow_command"
+    },
+    {
+      "step": 11,
+      "title": "Refactor main() to use registry",
+      "description": "Simplify cli.ts to dispatch only",
+      "modification_points": [
+        "Keep Node.js version check (lines 1-16)",
+        "Parse args into CommandContext",
+        "Register all command handlers",
+        "Call dispatchCommand(ctx)",
+        "Top-level catch for CliError display"
+      ],
+      "logic_flow": [
+        "Import all handlers",
+        "Register each handler",
+        "Parse args",
+        "Dispatch"
+      ],
+      "depends_on": [10],
+      "output": "main_refactored"
+    },
+    {
+      "step": 12,
+      "title": "Write registry and command tests",
+      "description": "Create comprehensive test suite",
+      "modification_points": [
+        "Registry tests: registration, dispatch, not found",
+        "Command tests: each handler (37 total)",
+        "Use createCliHarness from IMPL-002"
+      ],
+      "logic_flow": [
+        "Create registry.test.ts",
+        "Create command test files",
+        "Run full test suite"
+      ],
+      "depends_on": [11],
+      "output": "tests_complete"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context for CLI analysis",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-002 CLI registry analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/system-architect/analysis-F-002-cli-command-registry.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "examine_current_cli",
+      "action": "Read current cli.ts for command inventory",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/src/cli/cli.ts')"
+      ],
+      "output_to": "cli_source"
+    },
+    {
+      "step": "inherit_from_error_hierarchy",
+      "action": "Use error classes from IMPL-001",
+      "commands": [],
+      "output_to": "error_classes"
+    },
+    {
+      "step": "inherit_from_test_patterns",
+      "action": "Use test utilities from IMPL-002",
+      "commands": [],
+      "output_to": "test_utilities"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/system-architect/analysis-F-002-cli-command-registry.md",
+      "feature_id": "F-002",
+      "priority": "highest",
+      "usage": "CLI registry design and command structure"
+    }
+  ],
+
+  "inherited": {
+    "from": "IMPL-001",
+    "context": [
+      "AntfarmError hierarchy for CLI errors",
+      "CliError, UsageError, NotFoundError classes"
+    ]
+  },
+
+  "test": {
+    "commands": {
+      "run_tests": "npx tsx --test src/cli/*.test.ts",
+      "run_coverage": "npx tsx --test --coverage src/cli/**/*.test.ts"
+    },
+    "unit": [
+      "Registry registers and dispatches handlers",
+      "Each command handler matches correctly",
+      "Each command handler executes correctly",
+      "Unknown command prints usage and exits",
+      "Utils functions work correctly",
+      "CLI harness captures output"
+    ],
+    "coverage_target": 75,
+    "success_metrics": [
+      "37 command tests pass",
+      "Registry tests pass",
+      "CLI --version works"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "Manual arg parsing has subtle edge cases",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Keep parsing logic in utils.ts; test thoroughly"
+    },
+    {
+      "description": "Workflow command at ~250 lines is still large",
+      "probability": "High",
+      "impact": "Low",
+      "mitigation": "Single file for grouped commands is acceptable; subcommand delegation keeps it under 400 lines"
+    },
+    {
+      "description": "Error propagation may change with CliError",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Top-level catch handles display; handlers throw instead of exit"
+    }
+  ],
+
+  "code_skeleton": {
+    "interfaces": [
+      {
+        "name": "CommandContext",
+        "definition": "{ args: string[]; group: string; action: string; target: string }",
+        "purpose": "Parsed CLI arguments"
+      },
+      {
+        "name": "CommandHandler",
+        "definition": "{ name: string; description: string; match(ctx): boolean; execute(ctx): Promise<void> }",
+        "purpose": "Command handler contract"
+      }
+    ],
+    "classes": [
+      {
+        "name": "VersionHandler",
+        "purpose": "Handle --version flag",
+        "methods": ["match", "execute"]
+      },
+      {
+        "name": "WorkflowHandler",
+        "purpose": "Handle workflow subcommands",
+        "methods": ["match", "execute", "handleList", "handleStatus", "handleRun"]
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "refactor",
+    "agent": "@code-developer",
+    "execution_group": "phase-3-cli",
+    "module": "cli",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    }
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-005",
+    "strategy": "resume",
+    "resume_from": "WFS-arch-analysis-IMPL-001"
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-002"
+  }
+}

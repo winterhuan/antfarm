@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { computeHasFrontendChanges } from "../dist/installer/step-ops.js";
+import { computeHasFrontendChanges } from "../src/installer/step-ops.js";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";

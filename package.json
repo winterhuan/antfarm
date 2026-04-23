@@ -11,6 +11,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/server/index.html dist/server/index.html && chmod +x dist/cli/cli.js && node scripts/inject-version.js",
+    "test": "npx tsx --test src/**/*.test.ts tests/**/*.test.ts",
+    "test:unit": "npx tsx --test src/**/*.test.ts",
+    "test:integration": "npx tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "start": "node dist/cli/cli.js"
   },
   "dependencies": {

@@ -1,0 +1,428 @@
+{
+  "id": "IMPL-008",
+  "title": "Fill unit test coverage gaps to 80%+",
+  "description": "Add ~241 new unit tests across installer (85%), backend (80%), and CLI (75%). Co-locate new unit tests with source (src/**/*.test.ts). Use test patterns from IMPL-002. Execution order: F-001 tests > F-004 tests > F-003 tests > F-002 tests > gap fill. Depends on F-001, F-004, F-003, F-002, and F-008 (test patterns).",
+  "status": "pending",
+  "type": "test-gen",
+  "action": "Add",
+  "priority": "medium",
+  "effort": "large",
+  "scope": ["src/**/*.test.ts", "tests/**/*.test.ts"],
+  "focus_paths": [
+    "src/installer/",
+    "src/backend/",
+    "src/cli/",
+    "tests/"
+  ],
+  "depends_on": ["IMPL-002", "IMPL-003", "IMPL-004", "IMPL-005", "IMPL-006", "IMPL-007"],
+  "parallel_group": 5,
+
+  "convergence": {
+    "criteria": [
+      "241 new unit tests added",
+      "src/installer/* coverage >=85%",
+      "src/backend/* coverage >=80%",
+      "src/cli/* coverage >=75%",
+      "Tests co-located with source (src/**/*.test.ts)",
+      "All new tests pass",
+      "Existing tests still pass"
+    ],
+    "verification": "npx tsx --test --coverage src/**/*.test.ts tests/**/*.test.ts | grep -E '(installer|backend|cli).*\\d+%'",
+    "definition_of_done": "Unit test coverage targets met for all core modules"
+  },
+
+  "files": [
+    {
+      "path": "src/installer/step-parser.test.ts",
+      "action": "create",
+      "target": "Step parser tests",
+      "change": "~15 tests for parseOutputKeyValues, parseAndInsertStories, getStories"
+    },
+    {
+      "path": "src/installer/step-template.test.ts",
+      "action": "create",
+      "target": "Step template tests",
+      "change": "~10 tests for resolveTemplate, findMissingTemplateKeys"
+    },
+    {
+      "path": "src/installer/step-lifecycle.test.ts",
+      "action": "create",
+      "target": "Step lifecycle tests",
+      "change": "~20 tests for claimStep, completeStep, failStep, advancePipeline"
+    },
+    {
+      "path": "src/installer/step-utils.test.ts",
+      "action": "create",
+      "target": "Step utils tests",
+      "change": "~10 tests for utility functions"
+    },
+    {
+      "path": "src/installer/step-loop.test.ts",
+      "action": "create",
+      "target": "Step loop tests",
+      "change": "~10 tests for loop handling"
+    },
+    {
+      "path": "src/installer/errors.test.ts",
+      "action": "create",
+      "target": "Error hierarchy tests",
+      "change": "~20 tests for AntfarmError subclasses"
+    },
+    {
+      "path": "src/installer/types.test.ts",
+      "action": "create",
+      "target": "Type tests",
+      "change": "~15 tests for branded types, unions, validation"
+    },
+    {
+      "path": "src/backend/interface.test.ts",
+      "action": "create",
+      "target": "Backend interface tests",
+      "change": "~30 contract tests"
+    },
+    {
+      "path": "src/backend/openclaw.test.ts",
+      "action": "modify",
+      "target": "Additional OpenClaw tests",
+      "change": "~20 tests for new methods"
+    },
+    {
+      "path": "src/backend/hermes.test.ts",
+      "action": "modify",
+      "target": "Additional Hermes tests",
+      "change": "~20 tests for new methods"
+    },
+    {
+      "path": "src/backend/claude-code.test.ts",
+      "action": "modify",
+      "target": "Additional Claude Code tests",
+      "change": "~20 tests for new methods"
+    },
+    {
+      "path": "src/backend/codex.test.ts",
+      "action": "modify",
+      "target": "Additional Codex tests",
+      "change": "~20 tests for new methods"
+    },
+    {
+      "path": "src/cli/registry.test.ts",
+      "action": "create",
+      "target": "Registry tests",
+      "change": "~15 tests for registerCommand, dispatchCommand"
+    },
+    {
+      "path": "src/cli/utils.test.ts",
+      "action": "create",
+      "target": "CLI utils tests",
+      "change": "~10 tests for formatEventTime, parseBackendFlag"
+    },
+    {
+      "path": "src/cli/commands/*.test.ts",
+      "action": "create",
+      "target": "Command tests",
+      "change": "~37 tests across 8 command files"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Review feature tests",
+      "description": "Ensure prerequisite feature tests are complete",
+      "modification_points": [
+        "Verify F-001 (step-ops) has 45 tests",
+        "Verify F-004 (errors) has 20 tests",
+        "Verify F-003 (backends) has 30 contract tests",
+        "Verify F-002 (CLI) has 37 tests"
+      ],
+      "logic_flow": [
+        "List existing test files",
+        "Count tests per module",
+        "Identify gaps"
+      ],
+      "depends_on": [],
+      "output": "test_inventory"
+    },
+    {
+      "step": 2,
+      "title": "Test F-001 decomposed modules",
+      "description": "Complete step-ops module tests",
+      "modification_points": [
+        "step-parser.test.ts: parseOutputKeyValues edge cases",
+        "step-template.test.ts: template resolution",
+        "step-lifecycle.test.ts: state transitions",
+        "step-utils.test.ts: utility functions",
+        "step-loop.test.ts: loop iteration"
+      ],
+      "logic_flow": [
+        "Create test files for each module",
+        "Test all exported functions",
+        "Use builders from IMPL-002"
+      ],
+      "depends_on": [1],
+      "output": "step_ops_tests"
+    },
+    {
+      "step": 3,
+      "title": "Test error hierarchy",
+      "description": "Create comprehensive error class tests",
+      "modification_points": [
+        "AntfarmError base construction",
+        "Each subclass instantiation",
+        "Error code format validation",
+        "Object.freeze verification",
+        "Cause chaining"
+      ],
+      "logic_flow": [
+        "Create errors.test.ts",
+        "Test all 8 error classes",
+        "Verify immutability"
+      ],
+      "depends_on": [2],
+      "output": "error_tests"
+    },
+    {
+      "step": 4,
+      "title": "Test type utilities",
+      "description": "Create tests for branded types and validation",
+      "modification_points": [
+        "Smart constructor validation",
+        "Branded type construction",
+        "Discriminated union narrowing",
+        "ValidationResult handling"
+      ],
+      "logic_flow": [
+        "Create types.test.ts",
+        "Test all type utilities",
+        "Verify narrowing works"
+      ],
+      "depends_on": [3],
+      "output": "type_tests"
+    },
+    {
+      "step": 5,
+      "title": "Test backend contracts",
+      "description": "Complete parameterized contract tests",
+      "modification_points": [
+        "interface.test.ts: 30 parameterized tests",
+        "Test all backends uniformly",
+        "Capability validation"
+      ],
+      "logic_flow": [
+        "Create backend-contract.test.ts",
+        "Implement parameterized runner",
+        "Test all 4 backends"
+      ],
+      "depends_on": [4],
+      "output": "backend_contract_tests"
+    },
+    {
+      "step": 6,
+      "title": "Test backend implementations",
+      "description": "Complete backend-specific tests",
+      "modification_points": [
+        "openclaw.test.ts: 20 additional tests",
+        "hermes.test.ts: 20 additional tests",
+        "claude-code.test.ts: 20 additional tests",
+        "codex.test.ts: 20 additional tests"
+      ],
+      "logic_flow": [
+        "Update existing test files",
+        "Add tests for new methods",
+        "Test capability flags"
+      ],
+      "depends_on": [5],
+      "output": "backend_impl_tests"
+    },
+    {
+      "step": 7,
+      "title": "Test CLI registry",
+      "description": "Create registry and command tests",
+      "modification_points": [
+        "registry.test.ts: registration, dispatch, not found",
+        "utils.test.ts: formatEventTime, parseBackendFlag",
+        "commands/*.test.ts: 37 command tests"
+      ],
+      "logic_flow": [
+        "Create registry.test.ts",
+        "Create utils.test.ts",
+        "Create command test files",
+        "Use CLI harness"
+      ],
+      "depends_on": [6],
+      "output": "cli_tests"
+    },
+    {
+      "step": 8,
+      "title": "Fill remaining coverage gaps",
+      "description": "Add tests for uncovered code paths",
+      "modification_points": [
+        "Identify coverage gaps with --coverage",
+        "Add tests for edge cases",
+        "Target 80%+ per module"
+      ],
+      "logic_flow": [
+        "Run coverage report",
+        "Identify uncovered lines",
+        "Add targeted tests"
+      ],
+      "depends_on": [7],
+      "output": "gap_tests"
+    },
+    {
+      "step": 9,
+      "title": "Verify full test suite",
+      "description": "Ensure all tests pass and coverage targets met",
+      "modification_points": [
+        "Run full test suite",
+        "Check coverage thresholds",
+        "Fix any failures"
+      ],
+      "logic_flow": [
+        "npm test",
+        "Check coverage",
+        "Address issues"
+      ],
+      "depends_on": [8],
+      "output": "verification_complete"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context for test coverage analysis",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-007 test coverage analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/test-strategist/analysis-F-007-test-unit-coverage.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "inventory_existing_tests",
+      "action": "List existing test files",
+      "commands": [
+        "bash('find /home/maiscrm/workspace/antfarm/src -name \"*.test.ts\" | head -20')",
+        "bash('find /home/maiscrm/workspace/antfarm/tests -name \"*.test.ts\" | wc -l')"
+      ],
+      "output_to": "test_inventory"
+    },
+    {
+      "step": "inherit_from_test_patterns",
+      "action": "Use test utilities from IMPL-002",
+      "commands": [],
+      "output_to": "test_utilities"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/test-strategist/analysis-F-007-test-unit-coverage.md",
+      "feature_id": "F-007",
+      "priority": "highest",
+      "usage": "Test coverage targets and execution order"
+    }
+  ],
+
+  "inherited": {
+    "from": "IMPL-002",
+    "context": [
+      "Test builders: buildWorkflowSpec, buildStory, buildRunRecord",
+      "CLI harness: createCliHarness()",
+      "Database fixtures: createRunWithSteps, createCompletedRun, createFailedStep"
+    ]
+  },
+
+  "test": {
+    "commands": {
+      "run_tests": "npm test",
+      "run_coverage": "npx tsx --test --coverage src/**/*.test.ts tests/**/*.test.ts"
+    },
+    "unit": [
+      "installer coverage >=85%",
+      "backend coverage >=80%",
+      "cli coverage >=75%",
+      "241 new tests total"
+    ],
+    "coverage_target": 80,
+    "success_metrics": [
+      "All modules meet coverage targets",
+      "All new tests pass",
+      "No regressions in existing tests"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "Coverage targets may be overly ambitious",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Prioritize critical paths; document intentional exclusions",
+      "fallback": "Lower targets if unreachable after reasonable effort"
+    },
+    {
+      "description": "Integration tests in tests/ may overlap with new unit tests",
+      "probability": "Medium",
+      "impact": "Low",
+      "mitigation": "Keep integration tests in place; new unit tests focus on isolation"
+    },
+    {
+      "description": "241 tests is a large number; may exceed time budget",
+      "probability": "High",
+      "impact": "Medium",
+      "mitigation": "Batch test creation; prioritize high-value modules first",
+      "fallback": "Defer some tests to future work"
+    }
+  ],
+
+  "code_skeleton": {
+    "key_functions": [
+      {
+        "signature": "describe(name: string, fn: () => void)",
+        "purpose": "Test suite grouping",
+        "returns": "void"
+      },
+      {
+        "signature": "it(name: string, fn: () => Promise<void>)",
+        "purpose": "Individual test case",
+        "returns": "void"
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "test-gen",
+    "agent": "@code-developer",
+    "execution_group": "phase-5-tests",
+    "module": "shared",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    },
+    "test_framework": "node:test",
+    "coverage_target": "80%"
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-008",
+    "strategy": "merge_fork",
+    "merge_from": ["WFS-arch-analysis-IMPL-002", "WFS-arch-analysis-IMPL-003", "WFS-arch-analysis-IMPL-004", "WFS-arch-analysis-IMPL-005", "WFS-arch-analysis-IMPL-006", "WFS-arch-analysis-IMPL-007"]
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-007"
+  }
+}

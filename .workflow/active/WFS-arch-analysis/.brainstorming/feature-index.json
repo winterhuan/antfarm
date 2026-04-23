@@ -1,0 +1,149 @@
+{
+  "session_id": "WFS-arch-analysis",
+  "synthesized_at": "2026-04-23",
+  "features": [
+    {
+      "id": "F-001",
+      "name": "step-ops-decompose",
+      "description": "Split step-ops.ts (1103 lines) by functional domain into 5 focused modules",
+      "priority": "High",
+      "roles": ["system-architect", "test-strategist"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-001-step-ops-decompose.md",
+        "test-strategist": "test-strategist/analysis-F-001-step-ops-decompose.md"
+      },
+      "key_decisions": {
+        "module_structure": "step-parser(~200), step-template(~150), step-lifecycle(~350), step-loop(~200), step-utils(~100)",
+        "migration": "Barrel re-export for zero-breakage transition",
+        "test_requirements": "45 test cases across 5 files BEFORE decomposition"
+      }
+    },
+    {
+      "id": "F-002",
+      "name": "cli-command-registry",
+      "description": "Extract CLI commands into registry pattern, each command in own file",
+      "priority": "High",
+      "roles": ["system-architect", "test-strategist"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-002-cli-command-registry.md"
+      },
+      "key_decisions": {
+        "pattern": "CommandHandler interface + registry dispatch",
+        "structure": "src/cli/commands/*.ts, src/cli/registry.ts, src/cli/utils.ts",
+        "test_requirements": "37 command + registry tests, createCliHarness() pattern"
+      }
+    },
+    {
+      "id": "F-003",
+      "name": "backend-interface-unify",
+      "description": "Unify Backend interface with complete lifecycle methods and capabilities",
+      "priority": "High",
+      "roles": ["system-architect"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-003-backend-interface-unify.md"
+      },
+      "key_decisions": {
+        "new_methods": "configureAgent, removeAgent, validate, capabilities",
+        "optional_spawn": "spawnAgent?() only for ClaudeCode/Codex",
+        "permission_adapter": "Per-backend PermissionAdapter pattern",
+        "test_requirements": "Parameterized contract tests across all 4 backends"
+      }
+    },
+    {
+      "id": "F-004",
+      "name": "error-class-hierarchy",
+      "description": "Define AntfarmError hierarchy and migrate all error handling",
+      "priority": "High",
+      "roles": ["system-architect", "subject-matter-expert"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-004-error-class-hierarchy.md",
+        "subject-matter-expert": "subject-matter-expert/analysis-F-004-error-class-hierarchy.md"
+      },
+      "key_decisions": {
+        "base_class": "AntfarmError with code, context, cause, timestamp + Object.freeze",
+        "subclasses": "BackendError > ProfileError, StepError > RetryExhausted, ConfigError, CliError",
+        "error_codes": "MODULE.ACTION.REASON format",
+        "migration_priority": "1) Define hierarchy 2) Migrate step-ops 3) Migrate cli 4) Migrate backends"
+      }
+    },
+    {
+      "id": "F-005",
+      "name": "type-safety-enhance",
+      "description": "Branded types for IDs, discriminated unions for status, strict generics",
+      "priority": "Medium",
+      "roles": ["system-architect", "subject-matter-expert"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-005-type-safety-enhance.md",
+        "subject-matter-expert": "subject-matter-expert/analysis-F-005-type-safety-enhance.md"
+      },
+      "key_decisions": {
+        "branded_types": "WorkflowId, StepId, RunId, AgentId, branded BackendType",
+        "discriminated_unions": "StepResult by status, BackendConfig by type",
+        "validation": "ValidationResult<T> pattern replacing throw-based validation",
+        "smart_constructors": "workflowId(), stepId(), etc. as only way to create branded values"
+      }
+    },
+    {
+      "id": "F-006",
+      "name": "immutable-data-models",
+      "description": "Apply readonly to Step, Story, WorkflowSpec, BackendConfig",
+      "priority": "Medium",
+      "roles": ["system-architect", "subject-matter-expert"],
+      "files": {
+        "system-architect": "system-architect/analysis-F-006-immutable-data-models.md",
+        "subject-matter-expert": "subject-matter-expert/analysis-F-006-immutable-data-models.md"
+      },
+      "key_decisions": {
+        "enforcement_level": "readonly on all type fields + ReadonlyArray + Readonly<Record>",
+        "mutable_variant": "Mutable<T> type for internal DB construction only",
+        "mutation_points": "5 identified sites requiring spread-based updates",
+        "application_order": "WorkflowSpec > Story > Step > Context maps"
+      }
+    },
+    {
+      "id": "F-007",
+      "name": "test-unit-coverage",
+      "description": "Add unit tests for core modules, target >=80% coverage",
+      "priority": "Medium",
+      "roles": ["test-strategist"],
+      "files": {
+        "test-strategist": "test-strategist/analysis-F-007-test-unit-coverage.md"
+      },
+      "key_decisions": {
+        "target": "installer 85%, backend 80%, cli 75% — ~241 new test cases",
+        "execution_order": "F-001 tests > F-004 tests > F-003 tests > F-002 tests > gap fill",
+        "co_location": "New unit tests next to source (src/**/*.test.ts)",
+        "coverage_tool": "npx tsx --test --coverage"
+      }
+    },
+    {
+      "id": "F-008",
+      "name": "test-patterns",
+      "description": "Standardize test utilities, builders, fixtures",
+      "priority": "Low",
+      "roles": ["test-strategist"],
+      "files": {
+        "test-strategist": "test-strategist/analysis-F-008-test-patterns.md"
+      },
+      "key_decisions": {
+        "builders": "buildWorkflowSpec, buildStory, buildRunRecord, buildBackendSpy",
+        "cli_harness": "Intercept process.exit/stdout/stderr for command testing",
+        "db_fixtures": "createRunWithSteps, createCompletedRun, createFailedStep",
+        "no_new_deps": "node:test + node:assert/strict only"
+      }
+    }
+  ],
+  "dependency_graph": {
+    "F-004": { "blocks": ["F-001", "F-002", "F-003", "F-005"] },
+    "F-008": { "blocks": ["F-007"] },
+    "F-001": { "blocks": ["F-005", "F-006", "F-007"] },
+    "F-005": { "blocks": ["F-006"] }
+  },
+  "recommended_execution_order": [
+    "Phase 1: F-004 (error hierarchy) + F-008 (test patterns) — foundation",
+    "Phase 2: F-001 (step-ops decompose) + F-003 (backend unify) — parallel",
+    "Phase 3: F-002 (CLI registry)",
+    "Phase 4: F-005 (type safety) + F-006 (immutability) — parallel",
+    "Phase 5: F-007 (test coverage fill)"
+  ]
+}

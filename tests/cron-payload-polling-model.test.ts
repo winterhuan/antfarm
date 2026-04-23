@@ -37,7 +37,7 @@ describe("cron payload includes polling model (regression #121)", () => {
   });
 
   it("setupAgentCrons passes polling model in payload, not opus", async () => {
-    const { setupAgentCrons } = await import("../dist/installer/agent-cron.js");
+    const { setupAgentCrons } = await import("../src/installer/agent-cron.js");
 
     const fakeWorkflow = {
       id: "test-workflow",
@@ -85,7 +85,7 @@ describe("cron payload includes polling model (regression #121)", () => {
   });
 
   it("per-agent pollingModel overrides workflow-level polling model", async () => {
-    const { setupAgentCrons } = await import("../dist/installer/agent-cron.js");
+    const { setupAgentCrons } = await import("../src/installer/agent-cron.js");
 
     const fakeWorkflow = {
       id: "test-override",
@@ -134,7 +134,7 @@ describe("cron payload includes polling model (regression #121)", () => {
   });
 
   it("cron payload includes timeoutSeconds from workflow polling config", async () => {
-    const { setupAgentCrons } = await import("../dist/installer/agent-cron.js");
+    const { setupAgentCrons } = await import("../src/installer/agent-cron.js");
 
     const fakeWorkflow = {
       id: "test-timeout",

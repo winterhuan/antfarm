@@ -1,0 +1,278 @@
+{
+  "id": "IMPL-002",
+  "title": "Create standardized test patterns and utilities",
+  "description": "Implement test data builders (buildWorkflowSpec, buildStory, buildRunRecord, buildBackendSpy), CLI test harness with process.exit/stdout/stderr interception, and database fixtures (createRunWithSteps, createCompletedRun, createFailedStep). Zero new dependencies using node:test + node:assert/strict only. This is Phase 1 foundation task blocking F-007.",
+  "status": "pending",
+  "type": "testing",
+  "action": "Create",
+  "priority": "high",
+  "effort": "medium",
+  "scope": ["tests/helpers/", "tests/helpers/builders.ts", "tests/helpers/cli-harness.ts"],
+  "focus_paths": [
+    "tests/helpers/",
+    "tests/test-db.ts",
+    "src/installer/types.ts"
+  ],
+  "depends_on": [],
+  "parallel_group": 1,
+
+  "convergence": {
+    "criteria": [
+      "tests/helpers/builders.ts exists with 6 builder functions",
+      "tests/helpers/cli-harness.ts exists with process interception",
+      "tests/helpers/test-db.ts extended with 3 fixture functions",
+      "All builders accept Partial<T> and return exact types",
+      "CLI harness restores originals in cleanup",
+      "Zero new dependencies (only node:test + node:assert/strict)"
+    ],
+    "verification": "npx tsx --test --dry-run tests/helpers/builders.test.ts tests/helpers/cli-harness.test.ts",
+    "definition_of_done": "Test utilities are available and ready for use in F-001 through F-007"
+  },
+
+  "files": [
+    {
+      "path": "tests/helpers/builders.ts",
+      "action": "create",
+      "target": "Builder functions",
+      "change": "buildWorkflowSpec, buildWorkflowAgent, buildWorkflowStep, buildStory, buildRunRecord, buildBackendSpy"
+    },
+    {
+      "path": "tests/helpers/builders.test.ts",
+      "action": "create",
+      "target": "Builder tests",
+      "change": "Unit tests for all builder functions"
+    },
+    {
+      "path": "tests/helpers/cli-harness.ts",
+      "action": "create",
+      "target": "CLI harness",
+      "change": "Intercept process.stdout/stderr.write and process.exit, with cleanup"
+    },
+    {
+      "path": "tests/helpers/test-db.ts",
+      "action": "modify",
+      "target": "Fixture functions",
+      "change": "Add createRunWithSteps, createCompletedRun, createFailedStep"
+    },
+    {
+      "path": "tests/helpers/workspace-fixture.ts",
+      "action": "create",
+      "target": "Workspace fixture",
+      "change": "createWorkspaceDir for filesystem tests"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Implement test data builders",
+      "description": "Create builder functions for all core types",
+      "modification_points": [
+        "buildWorkflowSpec: id='test-wf', 1 agent, 1 step defaults",
+        "buildWorkflowAgent: id='test-agent', role='coding' defaults",
+        "buildWorkflowStep: id='test-step', input='do work' defaults",
+        "buildStory: id='story-1', status='pending' defaults",
+        "buildRunRecord: id='run-1', status='running' defaults",
+        "buildBackendSpy: enhanced spy with capability mocking"
+      ],
+      "logic_flow": [
+        "Define builder signatures with Partial<T> input",
+        "Set sensible defaults for each type",
+        "Return exact type (no shared mutable state)",
+        "Create builders.ts file"
+      ],
+      "depends_on": [],
+      "output": "builders"
+    },
+    {
+      "step": 2,
+      "title": "Create CLI test harness",
+      "description": "Implement process interception for CLI testing",
+      "modification_points": [
+        "Intercept process.stdout.write",
+        "Intercept process.stderr.write",
+        "Intercept process.exit",
+        "Provide restore function for cleanup"
+      ],
+      "logic_flow": [
+        "Capture original methods",
+        "Replace with interceptors that record calls",
+        "Export harness with captured output",
+        "Implement restore/cleanup"
+      ],
+      "depends_on": [1],
+      "output": "cli_harness"
+    },
+    {
+      "step": 3,
+      "title": "Extend database fixtures",
+      "description": "Add fixture functions to tests/helpers/test-db.ts",
+      "modification_points": [
+        "createRunWithSteps(db, opts) with configurable states",
+        "createCompletedRun(db, runId) for status tests",
+        "createFailedStep(db, runId, stepId, retryCount) for retry tests"
+      ],
+      "logic_flow": [
+        "Extend existing test-db.ts",
+        "Add fixture functions",
+        "Update exports"
+      ],
+      "depends_on": [2],
+      "output": "db_fixtures"
+    },
+    {
+      "step": 4,
+      "title": "Create workspace fixture utility",
+      "description": "Add filesystem test helper",
+      "modification_points": [
+        "createWorkspaceDir(structure: Record<string, string>)"
+      ],
+      "logic_flow": [
+        "Create workspace-fixture.ts",
+        "Implement directory creation with file content",
+        "Export utility"
+      ],
+      "depends_on": [3],
+      "output": "workspace_fixture"
+    },
+    {
+      "step": 5,
+      "title": "Write tests for test utilities",
+      "description": "Ensure builders and harness work correctly",
+      "modification_points": [
+        "Test builder defaults and overrides",
+        "Test CLI harness capture and restore",
+        "Test fixture creation"
+      ],
+      "logic_flow": [
+        "Create builders.test.ts",
+        "Create cli-harness.test.ts",
+        "Run tests to verify"
+      ],
+      "depends_on": [4],
+      "output": "utility_tests"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context package for types and existing test structure",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-008 test patterns analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/test-strategist/analysis-F-008-test-patterns.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "examine_existing_types",
+      "action": "Read core type definitions",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/src/installer/types.ts')",
+        "Read('/home/maiscrm/workspace/antfarm/tests/helpers/test-db.ts')"
+      ],
+      "output_to": "type_definitions"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/test-strategist/analysis-F-008-test-patterns.md",
+      "feature_id": "F-008",
+      "priority": "highest",
+      "usage": "Test pattern specifications and builder designs"
+    }
+  ],
+
+  "test": {
+    "commands": {
+      "run_tests": "npx tsx --test tests/helpers/builders.test.ts tests/helpers/cli-harness.test.ts",
+      "run_coverage": "npx tsx --test --coverage tests/helpers/*.test.ts"
+    },
+    "unit": [
+      "Builder functions return correct types with defaults",
+      "Builder overrides work correctly",
+      "CLI harness captures stdout/stderr",
+      "CLI harness captures exit code without terminating",
+      "CLI harness restore works correctly",
+      "Database fixtures create correct state"
+    ],
+    "coverage_target": 95,
+    "success_metrics": [
+      "6 builder functions tested",
+      "CLI harness fully covered",
+      "3 fixture functions tested"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "CLI harness process.exit interception may not work in all Node.js versions",
+      "probability": "Low",
+      "impact": "Medium",
+      "mitigation": "Test on Node.js 22+; use alternative approaches if needed",
+      "fallback": "Use subprocess-based testing for CLI commands"
+    },
+    {
+      "description": "Builder defaults may not cover all test scenarios",
+      "probability": "Medium",
+      "impact": "Low",
+      "mitigation": "Design for extension; document customization patterns"
+    }
+  ],
+
+  "code_skeleton": {
+    "interfaces": [
+      {
+        "name": "BuilderOptions",
+        "definition": "Partial<T> for each type T",
+        "purpose": "Allow override of default values"
+      }
+    ],
+    "key_functions": [
+      {
+        "signature": "buildWorkflowSpec(overrides?: Partial<WorkflowSpec>): WorkflowSpec",
+        "purpose": "Create test workflow specification",
+        "returns": "WorkflowSpec with defaults"
+      },
+      {
+        "signature": "createCliHarness(): { stdout: string[]; stderr: string[]; exitCode: number | null; restore: () => void }",
+        "purpose": "Intercept process I/O for testing",
+        "returns": "Harness with captured output and restore"
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "testing",
+    "agent": "@code-developer",
+    "execution_group": "phase-1-foundation",
+    "module": "shared",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    }
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-002",
+    "strategy": "new"
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-008"
+  }
+}

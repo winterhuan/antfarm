@@ -1,0 +1,415 @@
+{
+  "metadata": {
+    "project": "antfarm",
+    "type": "library",
+    "task_description": "Architectural analysis of the antfarm multi-agent workflow orchestration system",
+    "timestamp": "2026-04-22T18:00:00Z",
+    "keywords": ["architecture", "backend-plugin", "cron-orchestration", "subprocess-scheduler", "multi-agent", "workflow-engine"],
+    "complexity": "high",
+    "session_id": "WFS-arch-analysis"
+  },
+  "project_context": {
+    "architecture_patterns": [
+      "Plugin backend system (Backend interface with 4 implementations: OpenClaw, Hermes, Claude Code, Codex)",
+      "Strategy pattern for backend selection (config-resolver priority: CLI > agent > workflow > global > default)",
+      "Subprocess-based scheduling (SubprocessScheduler polls SQLite for pending steps, spawns claude/codex processes)",
+      "Cron-driven orchestration for OpenClaw/Hermes (gateway API creates per-agent cron jobs)",
+      "Polling model with step state machine (pending -> running -> done/failed/blocked/retry)",
+      "Story-based loop execution (loop steps iterate over stories with fresh sessions per iteration)",
+      "Event sourcing for observability (JSONL events file with webhook forwarding)",
+      "Health watchdog (Medic) for stuck-step detection and auto-remediation"
+    ],
+    "coding_conventions": {
+      "naming": {
+        "files": "kebab-case (e.g. subprocess-scheduler.ts, claude-code-spawn.ts)",
+        "classes": "PascalCase (e.g. SubprocessScheduler, HermesBackend)",
+        "functions": "camelCase (e.g. buildWorkPrompt, resolveBackendConfig)",
+        "types": "PascalCase (e.g. WorkflowSpec, AgentRole, BackendType)",
+        "constants": "UPPER_SNAKE_CASE (e.g. DEFAULT_INTERVAL_MS, ROLE_POLICIES)"
+      },
+      "module_system": "ESM (type: module in package.json, .js extensions in imports)",
+      "error_handling": "try-catch with graceful degradation, logging never throws, best-effort for fire-and-forget operations",
+      "async_patterns": "async/await throughout, Promise-based subprocess management"
+    },
+    "tech_stack": {
+      "language": "TypeScript (ES2022, strict mode, NodeNext modules)",
+      "runtime": "Node.js >= 22 (required for node:sqlite)",
+      "database": "SQLite via node:sqlite (DatabaseSync, synchronous API, WAL mode, migration-based schema evolution)",
+      "build_system": "tsc (TypeScript compiler)",
+      "test_framework": "node:test via tsx (tsx --test pattern)",
+      "cli_framework": "Custom CLI in src/cli/cli.ts (no framework, manual arg parsing)",
+      "http_server": "node:http (raw HTTP for dashboard, no Express/Fastify)"
+    },
+    "modules": [
+      {
+        "name": "src/backend/",
+        "role": "Plugin backend system - 4 agent runtime backends",
+        "key_files": [
+          "interface.ts (Backend interface: install/uninstall/startRun/stopRun)",
+          "index.ts (factory: createBackend, re-exports)",
+          "config-resolver.ts (5-level priority resolution for backend selection)",
+          "group-agents.ts (groups workflow agents by resolved backend type)",
+          "openclaw.ts (OpenClawBackend: cron-based, ROLE_POLICIES with per-tool deny lists)",
+          "hermes.ts (HermesBackend: profile-per-agent, hermes CLI wrapping)",
+          "claude-code.ts (ClaudeCodeBackend: project .claude/ artifacts, no-op startRun/stopRun)",
+          "claude-code-install.ts (subagent definition .md files with frontmatter)",
+          "claude-code-spawn.ts (buildClaudeCodeArgv for -p subprocess)",
+          "claude-code-policy.ts (ROLE_DISALLOWED_TOOLS per role)",
+          "codex.ts (CodexBackend: global ~/.codex/ artifacts, TOML config block management)",
+          "codex-config.ts (marker-based TOML block rewriting without parser dep)",
+          "codex-policy.ts (sandbox modes + developer_instructions guardrails)",
+          "codex-spawn.ts (buildCodexExecArgv for codex exec subprocess)"
+        ],
+        "line_count": "~2800 (including tests)"
+      },
+      {
+        "name": "src/installer/",
+        "role": "Workflow lifecycle management - install, run, step execution, uninstall",
+        "key_files": [
+          "step-ops.ts (1103 lines - step state machine, claim/complete/fail, loop handling, output parsing)",
+          "agent-cron.ts (polling prompt construction, role guardrails, cron teardown)",
+          "gateway-api.ts (422 lines - OpenClaw gateway REST API client)",
+          "uninstall.ts (405 lines - workflow/agent cleanup, active-run guards)",
+          "install.ts (orchestration: fetch workflow spec, group by backend, install serially)",
+          "run.ts (create run records, initialize steps/stories)",
+          "workflow-spec.ts (YAML workflow parser, template resolution)",
+          "workflow-fetch.ts (bundled workflow discovery and copy)",
+          "agent-provision.ts (agent workspace provisioning)",
+          "skill-install.ts (SKILL.md template substitution for each backend)",
+          "events.ts (JSONL event log with rotation and webhook forwarding)",
+          "status.ts (run/step status queries)",
+          "paths.ts (path resolution: antfarm root, workflows, workspaces, runs)",
+          "types.ts (core types: WorkflowSpec, WorkflowAgent, WorkflowStep, Story, AgentRole)"
+        ],
+        "line_count": "~3200"
+      },
+      {
+        "name": "src/server/",
+        "role": "Runtime infrastructure - scheduler, dashboard, daemon",
+        "key_files": [
+          "subprocess-scheduler.ts (566 lines - SubprocessScheduler class, polls DB, spawns claude/codex, reaps on exit)",
+          "dashboard.ts (149 lines - raw HTTP API server, serves runs/steps/workflows/events/medic data)",
+          "daemon.ts (30 lines - entry point: starts scheduler + dashboard, PID file, signal handling)",
+          "daemonctl.ts (daemon lifecycle: start/stop/status)"
+        ],
+        "line_count": "~800"
+      },
+      {
+        "name": "src/cli/",
+        "role": "Command-line interface",
+        "key_files": [
+          "cli.ts (770 lines - all CLI subcommands: install, uninstall, run, status, tick, daemon, medic, etc.)",
+          "ant.ts (top-level entry point)"
+        ],
+        "line_count": "~850"
+      },
+      {
+        "name": "src/lib/",
+        "role": "Shared utilities",
+        "key_files": [
+          "config.ts (global config.yaml read/write at ~/.config/antfarm/)",
+          "logger.ts (rotating file logger at ~/.openclaw/antfarm/logs/)",
+          "frontend-detect.ts (detects frontend file changes for conditional visual verification)"
+        ],
+        "line_count": "~200"
+      },
+      {
+        "name": "src/medic/",
+        "role": "Health watchdog - detects and remediates stuck/stalled workflow state",
+        "key_files": [
+          "medic.ts (280 lines - runs periodic checks, auto-remediates stuck steps, orphaned crons)",
+          "checks.ts (210 lines - modular check functions: stuckSteps, orphanedCrons)",
+          "medic-cron.ts (cron-based medic scheduling)"
+        ],
+        "line_count": "~510"
+      }
+    ],
+    "file_sizes": {
+      "src/installer/step-ops.ts": 1103,
+      "src/cli/cli.ts": 770,
+      "src/server/subprocess-scheduler.ts": 566,
+      "src/backend/hermes.test.ts": 493,
+      "src/backend/hermes.ts": 444,
+      "src/installer/gateway-api.ts": 422,
+      "src/installer/uninstall.ts": 405,
+      "src/medic/medic.ts": 280,
+      "src/installer/agent-cron.ts": 276,
+      "src/backend/openclaw.ts": 272,
+      "src/backend/codex-config.ts": 190,
+      "src/installer/status.ts": 181,
+      "src/installer/skill-install.ts": 181,
+      "src/installer/agent-provision.ts": 178,
+      "src/installer/workflow-spec.ts": 131,
+      "src/installer/run.ts": 120,
+      "src/installer/types.ts": 118,
+      "src/installer/events.ts": 117,
+      "total_src": 10157
+    },
+    "test_coverage": "31+ test files across src/ (unit co-located) and tests/ (integration). Tests cover: polling model, cron payload, external skills, gateway API, frontend detection/e2e, logger callers, model field preservation, multiline output parsing, peek-step polling, terminal state guards, two-phase cron/integration, work prompts, workflow skills, security audit polling, and backend-specific tests (hermes, codex, claude-code, openclaw, config-resolver, group-agents). Uses tsx --test with node:test runner."
+  },
+  "assets": {
+    "entry_points": [
+      {
+        "path": "src/cli/cli.ts",
+        "role": "CLI entry point (all subcommands)",
+        "exports": ["installWorkflow", "uninstallAllWorkflows", "runWorkflow", "tickWorkflowAgent", "startDaemon", "stopDaemon"],
+        "relevance_score": 0.99
+      },
+      {
+        "path": "src/server/daemon.ts",
+        "role": "Daemon entry point (scheduler + dashboard)",
+        "exports": [],
+        "relevance_score": 0.95
+      },
+      {
+        "path": "src/index.ts",
+        "role": "Library entry point (re-exports install + db)",
+        "exports": ["installWorkflow", "getDb"],
+        "relevance_score": 0.90
+      }
+    ],
+    "core_modules": [
+      {
+        "path": "src/backend/interface.ts",
+        "role": "Backend plugin interface definition",
+        "exports": ["Backend", "BackendType"],
+        "relevance_score": 0.99
+      },
+      {
+        "path": "src/backend/index.ts",
+        "role": "Backend factory + re-exports",
+        "exports": ["createBackend", "groupAgentsByBackend", "resolveBackendConfig", "validateBackendType"],
+        "relevance_score": 0.98
+      },
+      {
+        "path": "src/installer/types.ts",
+        "role": "Core type definitions (WorkflowSpec, WorkflowAgent, WorkflowStep, Story, AgentRole)",
+        "exports": ["WorkflowSpec", "WorkflowAgent", "WorkflowStep", "Story", "AgentRole", "StepResult", "WorkflowRunRecord"],
+        "relevance_score": 0.99
+      },
+      {
+        "path": "src/installer/step-ops.ts",
+        "role": "Step state machine - claim/complete/fail, loop iteration, output parsing",
+        "exports": ["parseOutputKeyValues", "claimStep", "completeStep", "failStep", "peekStep", "getStories"],
+        "relevance_score": 0.98
+      },
+      {
+        "path": "src/server/subprocess-scheduler.ts",
+        "role": "Scheduler - polls DB for pending steps, spawns claude/codex, manages concurrency",
+        "exports": ["SubprocessScheduler", "tickWorkflowAgent", "WorkflowTickResult"],
+        "relevance_score": 0.97
+      },
+      {
+        "path": "src/db.ts",
+        "role": "SQLite database (node:sqlite sync), schema migration, connection caching",
+        "exports": ["getDb", "getDbPath", "nextRunNumber"],
+        "relevance_score": 0.96
+      },
+      {
+        "path": "src/backend/config-resolver.ts",
+        "role": "5-level backend priority resolution",
+        "exports": ["resolveBackendConfig", "validateBackendConfig"],
+        "relevance_score": 0.95
+      },
+      {
+        "path": "src/backend/openclaw.ts",
+        "role": "OpenClaw backend - cron jobs, ROLE_POLICIES, per-tool deny lists",
+        "exports": ["OpenClawBackend", "getMaxRoleTimeoutSeconds"],
+        "relevance_score": 0.94
+      },
+      {
+        "path": "src/backend/claude-code.ts",
+        "role": "Claude Code backend - project .claude/ artifacts, subagent definitions",
+        "exports": ["ClaudeCodeBackend", "readClaudeCodeProjectDir"],
+        "relevance_score": 0.94
+      },
+      {
+        "path": "src/backend/codex.ts",
+        "role": "Codex backend - global ~/.codex/ artifacts, TOML config block management",
+        "exports": ["CodexBackend", "getCodexProfileName"],
+        "relevance_score": 0.94
+      },
+      {
+        "path": "src/backend/hermes.ts",
+        "role": "Hermes backend - profile-per-agent, CLI wrapping for profile creation/cron",
+        "exports": ["HermesBackend", "getProfileName"],
+        "relevance_score": 0.94
+      },
+      {
+        "path": "src/installer/agent-cron.ts",
+        "role": "Polling prompt construction, role guardrails, cron teardown",
+        "exports": ["buildWorkPrompt", "buildPollingPrompt", "teardownWorkflowCronsIfIdle", "buildRoleGuardrail"],
+        "relevance_score": 0.93
+      },
+      {
+        "path": "src/installer/install.ts",
+        "role": "Workflow install orchestration",
+        "exports": ["installWorkflow"],
+        "relevance_score": 0.92
+      }
+    ],
+    "config_files": [
+      {
+        "path": "package.json",
+        "relevance_score": 0.90,
+        "notes": "Runtime deps: json5, yaml. Dev: @types/node, typescript. Node >= 22. ESM."
+      },
+      {
+        "path": "tsconfig.json",
+        "relevance_score": 0.85,
+        "notes": "ES2022, NodeNext modules, strict mode, rootDir=src"
+      },
+      {
+        "path": "tsconfig.test.json",
+        "relevance_score": 0.80,
+        "notes": "Extends tsconfig.json, includes src/**/*.ts + tests/**/*.ts"
+      }
+    ],
+    "workflow_definitions": [
+      {
+        "path": "workflows/feature-dev/workflow.yml",
+        "role": "Feature development workflow (7 agents, 7 steps, loop-based story execution)",
+        "relevance_score": 0.88
+      },
+      {
+        "path": "workflows/bug-fix/workflow.yml",
+        "role": "Bug fix workflow",
+        "relevance_score": 0.85
+      },
+      {
+        "path": "workflows/security-audit/workflow.yml",
+        "role": "Security audit workflow",
+        "relevance_score": 0.85
+      }
+    ],
+    "tests": [
+      {
+        "path": "tests/",
+        "file_count": 31,
+        "relevance_score": 0.85,
+        "notes": "Integration tests covering polling, cron, gateway, frontend, logger, model preservation, terminal states, two-phase"
+      },
+      {
+        "path": "src/",
+        "test_file_count": 12,
+        "relevance_score": 0.80,
+        "notes": "Co-located unit tests for backend (hermes, codex, claude-code, openclaw, config-resolver, group-agents, claude-code-spawn, codex-spawn, claude-code-policy, codex-policy, codex-config), installer (status, run, skill-install, workflow-spec)"
+      }
+    ]
+  },
+  "dependencies": {
+    "runtime": [
+      {
+        "package": "json5",
+        "version": "^2.2.3",
+        "usage": "JSON5 parsing for config files"
+      },
+      {
+        "package": "yaml",
+        "version": "^2.4.5",
+        "usage": "YAML parsing for workflow.yml and config.yaml"
+      },
+      {
+        "package": "node:sqlite",
+        "version": "built-in (Node 22+)",
+        "usage": "Synchronous SQLite database for runs/steps/stories state"
+      },
+      {
+        "package": "node:child_process",
+        "version": "built-in",
+        "usage": "Spawning claude/codex/hermes subprocesses"
+      },
+      {
+        "package": "node:http",
+        "version": "built-in",
+        "usage": "Dashboard HTTP server"
+      },
+      {
+        "package": "node:fs",
+        "version": "built-in",
+        "usage": "File system operations (workspace provisioning, config, logs)"
+      },
+      {
+        "package": "node:crypto",
+        "version": "built-in",
+        "usage": "UUID generation for runs/steps"
+      },
+      {
+        "package": "node:path",
+        "version": "built-in",
+        "usage": "Path resolution throughout"
+      },
+      {
+        "package": "node:os",
+        "version": "built-in",
+        "usage": "Home directory resolution for state paths"
+      }
+    ],
+    "dev": [
+      {
+        "package": "typescript",
+        "version": "^5.9.3",
+        "usage": "TypeScript compiler"
+      },
+      {
+        "package": "@types/node",
+        "version": "^25.2.1",
+        "usage": "Node.js type definitions"
+      }
+    ]
+  },
+  "conflict_detection": {
+    "risk_level": "low",
+    "risk_factors": {
+      "existing_implementations": [
+        "src/installer/step-ops.ts (1103 lines - largest file, complex state machine)",
+        "src/cli/cli.ts (770 lines - manual arg parsing, fragile for new subcommands)",
+        "src/server/subprocess-scheduler.ts (566 lines - concurrent process management)"
+      ],
+      "api_changes": false,
+      "architecture_changes": false,
+      "data_model_changes": false,
+      "breaking_changes": []
+    },
+    "potential_issues": [
+      {
+        "issue": "step-ops.ts at 1103 lines exceeds 800-line guideline",
+        "severity": "medium",
+        "mitigation": "Consider extracting loop-handling or output-parsing into separate modules"
+      },
+      {
+        "issue": "cli.ts at 770 lines with manual arg parsing is fragile for extension",
+        "severity": "medium",
+        "mitigation": "Manual parsing works but adding subcommands requires careful positional/flag ordering"
+      },
+      {
+        "issue": "Synchronous SQLite API (DatabaseSync) blocks the event loop during DB operations",
+        "severity": "low",
+        "mitigation": "Acceptable for current scale; WAL mode mitigates contention. Would need async refactor for high concurrency"
+      },
+      {
+        "issue": "DB connection caching with 5-second TTL (DB_MAX_AGE_MS) may cause stale connections",
+        "severity": "low",
+        "mitigation": "Reconnection logic exists, but rapid sequential calls may open/close repeatedly"
+      },
+      {
+        "issue": "Hermes CLI flag positioning inconsistencies documented in CLAUDE.md",
+        "severity": "info",
+        "mitigation": "Well-documented gotchas, but new contributors may hit these"
+      },
+      {
+        "issue": "Marker race condition (.antfarm marker written after profile creation)",
+        "severity": "low",
+        "mitigation": "Acknowledged in CLAUDE.md as known limitation, not yet fixed"
+      }
+    ],
+    "affected_modules": [],
+    "mitigation_strategy": "Analysis-only task, no modifications planned. Key files identified for reference."
+  },
+  "architecture_diagram": {
+    "data_flow": "CLI (cli.ts) -> Installer (install.ts) -> Backend (interface.ts implementations) -> Scheduler (subprocess-scheduler.ts) -> Subprocess (claude -p / codex exec / hermes cron) -> DB (db.ts) -> Dashboard (dashboard.ts)",
+    "backend_resolution": "CLI flag > agent.backend > workflow.defaultBackend > ~/.config/antfarm/config.yaml > hardcoded 'openclaw'",
+    "state_machine": "run: running -> paused/blocked/completed/canceled | step: pending -> running -> done/failed/waiting | story: pending -> running -> done/failed",
+    "loop_execution": "step type=loop -> iterates over stories -> fresh session per iteration -> optional verify_each with verify_step"
+  }
+}

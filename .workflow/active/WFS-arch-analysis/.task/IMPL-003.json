@@ -1,0 +1,370 @@
+{
+  "id": "IMPL-003",
+  "title": "Decompose step-ops.ts into 5 focused modules",
+  "description": "Split 1103-line step-ops.ts into 5 modules: step-parser (~200 lines), step-template (~150), step-lifecycle (~350), step-loop (~200), step-utils (~100). Create barrel re-export at src/installer/step-ops/index.ts for zero-breakage migration. Write 45 tests BEFORE decomposition to ensure behavior preservation. Depends on F-004 error hierarchy.",
+  "status": "pending",
+  "type": "refactor",
+  "action": "Refactor",
+  "priority": "high",
+  "effort": "large",
+  "scope": ["src/installer/step-ops/", "src/installer/step-parser.ts", "src/installer/step-template.ts", "src/installer/step-lifecycle.ts", "src/installer/step-loop.ts", "src/installer/step-utils.ts"],
+  "focus_paths": [
+    "src/installer/step-ops.ts",
+    "src/installer/types.ts",
+    "src/db.ts"
+  ],
+  "depends_on": ["IMPL-001"],
+  "parallel_group": 2,
+
+  "convergence": {
+    "criteria": [
+      "5 new modules created with correct line counts",
+      "Barrel re-export at src/installer/step-ops/index.ts works",
+      "45 test cases pass before and after decomposition",
+      "All existing imports continue to work via barrel",
+      "No functional changes to step logic",
+      "Each module <400 lines (target met)"
+    ],
+    "verification": "npm test -- step-ops && ls -la src/installer/step-ops/ | wc -l = 6",
+    "definition_of_done": "step-ops.ts decomposed into 5 modules with tests passing and zero breaking changes"
+  },
+
+  "files": [
+    {
+      "path": "src/installer/step-parser.ts",
+      "action": "create",
+      "target": "Output parsing functions",
+      "change": "parseOutputKeyValues, parseAndInsertStories, getStories, getCurrentStory, formatStoryForTemplate, formatCompletedStories (~200 lines)"
+    },
+    {
+      "path": "src/installer/step-template.ts",
+      "action": "create",
+      "target": "Template resolution",
+      "change": "resolveTemplate, findMissingTemplateKeys, computeHasFrontendChanges (~150 lines, pure functions)"
+    },
+    {
+      "path": "src/installer/step-lifecycle.ts",
+      "action": "create",
+      "target": "Step lifecycle",
+      "change": "peekStep, claimStep, completeStep, failStep, advancePipeline, cleanupAbandonedSteps (~350 lines)"
+    },
+    {
+      "path": "src/installer/step-loop.ts",
+      "action": "create",
+      "target": "Loop handling",
+      "change": "handleVerifyEachCompletion, checkLoopContinuation, story retry logic (~200 lines)"
+    },
+    {
+      "path": "src/installer/step-utils.ts",
+      "action": "create",
+      "target": "Utilities",
+      "change": "getWorkflowId, scheduleRunCronTeardown, readProgressFile, archiveRunProgress, escalation (~100 lines)"
+    },
+    {
+      "path": "src/installer/step-ops/index.ts",
+      "action": "create",
+      "target": "Barrel re-export",
+      "change": "Re-export all functions from 5 modules for zero-breakage"
+    },
+    {
+      "path": "src/installer/step-ops.ts",
+      "action": "modify",
+      "target": "Original file",
+      "change": "Add deprecation comment, eventually removable after migration"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Write tests for current step-ops.ts",
+      "description": "Create comprehensive test suite before decomposition",
+      "modification_points": [
+        "45 test cases covering all step-ops functions",
+        "Tests in src/installer/step-ops.test.ts",
+        "Cover: parseOutputKeyValues, claimStep, completeStep, failStep, advancePipeline, etc."
+      ],
+      "logic_flow": [
+        "Analyze step-ops.ts functions",
+        "Write tests for each function",
+        "Verify all tests pass on monolith",
+        "Commit as baseline"
+      ],
+      "depends_on": [],
+      "output": "test_baseline"
+    },
+    {
+      "step": 2,
+      "title": "Extract step-parser.ts",
+      "description": "Move output parsing functions to dedicated module",
+      "modification_points": [
+        "Extract parseOutputKeyValues (lines 24-84)",
+        "Extract parseAndInsertStories (DB interaction)",
+        "Extract getStories, getCurrentStory",
+        "Extract formatStoryForTemplate, formatCompletedStories"
+      ],
+      "logic_flow": [
+        "Create step-parser.ts",
+        "Move parsing functions",
+        "Update imports",
+        "Run tests"
+      ],
+      "depends_on": [1],
+      "output": "step_parser"
+    },
+    {
+      "step": 3,
+      "title": "Extract step-template.ts",
+      "description": "Move template resolution functions",
+      "modification_points": [
+        "Extract resolveTemplate (lines 85-111, 392-404)",
+        "Extract findMissingTemplateKeys",
+        "Extract computeHasFrontendChanges"
+      ],
+      "logic_flow": [
+        "Create step-template.ts",
+        "Move template functions (pure)",
+        "Zero DB dependencies",
+        "Run tests"
+      ],
+      "depends_on": [2],
+      "output": "step_template"
+    },
+    {
+      "step": 4,
+      "title": "Extract step-utils.ts",
+      "description": "Move utility functions",
+      "modification_points": [
+        "Extract getWorkflowId, scheduleRunCronTeardown",
+        "Extract readProgressFile, archiveRunProgress",
+        "Extract escalation functions (lines 60-148, 961-1030)"
+      ],
+      "logic_flow": [
+        "Create step-utils.ts",
+        "Move utility functions",
+        "Run tests"
+      ],
+      "depends_on": [3],
+      "output": "step_utils"
+    },
+    {
+      "step": 5,
+      "title": "Extract step-loop.ts",
+      "description": "Move loop-specific logic",
+      "modification_points": [
+        "Extract handleVerifyEachCompletion",
+        "Extract checkLoopContinuation",
+        "Extract story retry logic from failStep"
+      ],
+      "logic_flow": [
+        "Create step-loop.ts",
+        "Move loop functions",
+        "Break conceptual cycles",
+        "Run tests"
+      ],
+      "depends_on": [4],
+      "output": "step_loop"
+    },
+    {
+      "step": 6,
+      "title": "Extract step-lifecycle.ts",
+      "description": "Move core step lifecycle to final module",
+      "modification_points": [
+        "Extract peekStep, claimStep",
+        "Extract completeStep, failStep (simplified)",
+        "Extract advancePipeline, cleanupAbandonedSteps"
+      ],
+      "logic_flow": [
+        "Create step-lifecycle.ts",
+        "Move remaining functions",
+        "Import from parser/template/loop/utils",
+        "Run tests"
+      ],
+      "depends_on": [5],
+      "output": "step_lifecycle"
+    },
+    {
+      "step": 7,
+      "title": "Create barrel re-export",
+      "description": "Create index.ts for zero-breakage migration",
+      "modification_points": [
+        "Create src/installer/step-ops/index.ts",
+        "Re-export all functions from 5 modules"
+      ],
+      "logic_flow": [
+        "Create index.ts barrel",
+        "Test that existing imports work",
+        "Add deprecation notice to old step-ops.ts"
+      ],
+      "depends_on": [6],
+      "output": "barrel_export"
+    },
+    {
+      "step": 8,
+      "title": "Verify all tests pass",
+      "description": "Ensure decomposition preserves behavior",
+      "modification_points": [
+        "Run full test suite",
+        "Fix any regressions"
+      ],
+      "logic_flow": [
+        "Execute npm test",
+        "Verify 45 tests pass",
+        "Commit decomposition"
+      ],
+      "depends_on": [7],
+      "output": "verification_complete"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context for step-ops analysis",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-001 decomposition analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/system-architect/analysis-F-001-step-ops-decompose.md')",
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/test-strategist/analysis-F-001-step-ops-decompose.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "analyze_current_step_ops",
+      "action": "Read current step-ops.ts for function inventory",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/src/installer/step-ops.ts')"],
+      "output_to": "step_ops_source"
+    },
+    {
+      "step": "inherit_from_error_hierarchy",
+      "action": "Use error classes from IMPL-001",
+      "commands": [],
+      "output_to": "error_classes"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/system-architect/analysis-F-001-step-ops-decompose.md",
+      "feature_id": "F-001",
+      "priority": "highest",
+      "usage": "Module structure and decomposition strategy"
+    },
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/test-strategist/analysis-F-001-step-ops-decompose.md",
+      "feature_id": "F-001",
+      "priority": "high",
+      "usage": "Test requirements and strategy"
+    }
+  ],
+
+  "inherited": {
+    "from": "IMPL-001",
+    "context": [
+      "AntfarmError hierarchy for error handling in step-ops",
+      "Error code convention MODULE.ACTION.REASON"
+    ]
+  },
+
+  "test": {
+    "commands": {
+      "run_tests": "npm test -- step-ops",
+      "run_coverage": "npx tsx --test --coverage src/installer/step-*.test.ts"
+    },
+    "unit": [
+      "parseOutputKeyValues parses various formats",
+      "getStories returns correct story array",
+      "resolveTemplate substitutes variables",
+      "findMissingTemplateKeys detects missing",
+      "claimStep transitions pending->running",
+      "completeStep updates status",
+      "failStep handles retry logic",
+      "advancePipeline triggers next step"
+    ],
+    "coverage_target": 85,
+    "success_metrics": [
+      "45 tests pass before and after decomposition",
+      "Each module has dedicated test file",
+      "Line coverage >=85% for step-ops modules"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "Circular dependencies may emerge during extraction",
+      "probability": "Medium",
+      "impact": "High",
+      "mitigation": "Self-contained cycle in step-lifecycle is acceptable; break larger cycles",
+      "fallback": "Keep some functions together if extraction causes cycle"
+    },
+    {
+      "description": "Function boundaries may not be as clean as expected",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Refactor shared state into parameters or utils module"
+    },
+    {
+      "description": "Tests may be tightly coupled to implementation",
+      "probability": "Medium",
+      "impact": "Low",
+      "mitigation": "Focus tests on behavior, not implementation details"
+    }
+  ],
+
+  "code_skeleton": {
+    "interfaces": [
+      {
+        "name": "ParseResult",
+        "definition": "{ keyValues: Record<string, string>; stories: Story[] }",
+        "purpose": "Result of parsing step output"
+      }
+    ],
+    "key_functions": [
+      {
+        "signature": "parseOutputKeyValues(output: string): Record<string, string>",
+        "purpose": "Parse key=value lines from step output",
+        "returns": "Parsed key-value map"
+      },
+      {
+        "signature": "claimStep(agentId: string, db: DatabaseSync): StepResult",
+        "purpose": "Atomically claim pending step for agent",
+        "returns": "Claimed step or null"
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "refactor",
+    "agent": "@code-developer",
+    "execution_group": "phase-2-parallel",
+    "module": "installer",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    }
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-003",
+    "strategy": "resume",
+    "resume_from": "WFS-arch-analysis-IMPL-001"
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-001"
+  }
+}

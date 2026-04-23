@@ -1,0 +1,18 @@
+{
+  "terminology": [
+    {"term": "Backend Abstraction", "definition": "Interface layer supporting multiple AI model providers (OpenClaw, Hermes, Claude Code, Codex) with unified lifecycle operations.", "aliases": ["AI Backend", "Model Provider"], "category": "Infrastructure"},
+    {"term": "Workflow Lifecycle", "definition": "Complete operational cycle from installation through execution to cleanup, including install, start, stop, and uninstall phases.", "aliases": ["Lifecycle Management"], "category": "Process"},
+    {"term": "Agent Provisioning", "definition": "Creation and configuration of specialized AI agents with defined roles, workspaces, and tool permissions within workflows.", "aliases": ["Agent Setup"], "category": "Runtime"},
+    {"term": "Step Operations", "definition": "Atomic task execution unit with retry logic, template resolution, output parsing, and failure handling within workflow steps.", "aliases": ["Task Operations"], "category": "Workflow"},
+    {"term": "Subprocess Scheduler", "definition": "Orchestrates agent execution through child processes with concurrency control, output streaming, and lifecycle management.", "aliases": ["Process Manager"], "category": "Execution"},
+    {"term": "Cron Orchestration", "definition": "Time-based automation system for agent heartbeats, polling, and continuous task execution using scheduled cron jobs.", "aliases": ["Agent Scheduler"], "category": "Automation"},
+    {"term": "Workflow Specification", "definition": "Declarative definition of complete workflows including agents, steps, roles, and execution constraints.", "aliases": ["Workflow Spec"], "category": "Configuration"},
+    {"term": "Template Resolution", "definition": "Context-aware substitution engine for placeholder variables and template expansion in step inputs and configurations.", "aliases": ["Variable Substitution"], "category": "Processing"},
+    {"term": "Role Guardrails", "definition": "Safety constraints limiting agent capabilities based on designated roles (analysis, coding, verification, testing).", "aliases": ["Role Constraints"], "category": "Security"},
+    {"term": "Story Management", "definition": "BDD-style story execution with lifecycle tracking, acceptance criteria validation, and status management.", "aliases": ["BDD Execution"], "category": "Testing"}
+  ],
+  "non_goals": [
+    "Workflow definitions (bundled YAMLs in workflows/)",
+    "Database performance (SQLite layer optimization)"
+  ]
+}

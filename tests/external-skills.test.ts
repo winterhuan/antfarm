@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import type { WorkflowSpec } from "../src/installer/types.js";
 
 // We test provisionAgents indirectly by calling the exported function
 // But since installExternalSkills is not exported, we test via provisionAgents
@@ -38,20 +39,20 @@ describe("External skill installation", () => {
 
   it("resolves skill from ~/.openclaw/workspace/skills/", async () => {
     // Import after setting HOME
-    const mod = await import("../dist/installer/agent-provision.js");
+    const mod = await import("../src/installer/agent-provision.js");
     // We can't directly test resolveExternalSkillSource since it's not exported,
     // but we can test provisionAgents with a minimal workflow
     const workflowDir = path.join(tmpDir, "workflow");
     await fs.mkdir(workflowDir, { recursive: true });
 
-    const workflow = {
+    const workflow: WorkflowSpec = {
       id: "test-wf",
       name: "Test",
       steps: [],
       agents: [
         {
           id: "verifier",
-          role: "verify",
+          role: "verification",
           workspace: {
             baseDir: "agents/verifier",
             skills: ["agent-browser"],
@@ -62,7 +63,7 @@ describe("External skill installation", () => {
     };
 
     const results = await mod.provisionAgents({
-      workflow: workflow as any,
+      workflow,
       workflowDir,
       installSkill: true,
     });
@@ -74,11 +75,11 @@ describe("External skill installation", () => {
   });
 
   it("resolves skill from ~/.openclaw/skills/ (fallback)", async () => {
-    const mod = await import("../dist/installer/agent-provision.js");
+    const mod = await import("../src/installer/agent-provision.js");
     const workflowDir = path.join(tmpDir, "workflow");
     await fs.mkdir(workflowDir, { recursive: true });
 
-    const workflow = {
+    const workflow: WorkflowSpec = {
       id: "test-wf2",
       name: "Test",
       steps: [],
@@ -96,7 +97,7 @@ describe("External skill installation", () => {
     };
 
     const results = await mod.provisionAgents({
-      workflow: workflow as any,
+      workflow,
       workflowDir,
       installSkill: true,
     });
@@ -107,18 +108,18 @@ describe("External skill installation", () => {
   });
 
   it("skips missing external skills with warning (does not throw)", async () => {
-    const mod = await import("../dist/installer/agent-provision.js");
+    const mod = await import("../src/installer/agent-provision.js");
     const workflowDir = path.join(tmpDir, "workflow");
     await fs.mkdir(workflowDir, { recursive: true });
 
-    const workflow = {
+    const workflow: WorkflowSpec = {
       id: "test-wf3",
       name: "Test",
       steps: [],
       agents: [
         {
           id: "verifier",
-          role: "verify",
+          role: "verification",
           workspace: {
             baseDir: "agents/verifier",
             skills: ["nonexistent-skill"],
@@ -130,28 +131,28 @@ describe("External skill installation", () => {
 
     // Should not throw
     await mod.provisionAgents({
-      workflow: workflow as any,
+      workflow,
       workflowDir,
       installSkill: true,
     });
   });
 
   it("does not interfere with antfarm-workflows skill (bundled)", async () => {
-    const mod = await import("../dist/installer/agent-provision.js");
+    const mod = await import("../src/installer/agent-provision.js");
     const workflowDir = path.join(tmpDir, "workflow");
     // Create bundled antfarm-workflows skill in workflow dir
     const bundledSkillDir = path.join(workflowDir, "skills", "antfarm-workflows");
     await fs.mkdir(bundledSkillDir, { recursive: true });
     await fs.writeFile(path.join(bundledSkillDir, "SKILL.md"), "# Antfarm Workflows");
 
-    const workflow = {
+    const workflow: WorkflowSpec = {
       id: "test-wf4",
       name: "Test",
       steps: [],
       agents: [
         {
           id: "planner",
-          role: "planning",
+          role: "analysis",
           workspace: {
             baseDir: "agents/planner",
             skills: ["antfarm-workflows", "agent-browser"],
@@ -162,7 +163,7 @@ describe("External skill installation", () => {
     };
 
     const results = await mod.provisionAgents({
-      workflow: workflow as any,
+      workflow,
       workflowDir,
       installSkill: true,
     });
@@ -179,18 +180,18 @@ describe("External skill installation", () => {
   });
 
   it("installs skills for multiple agents independently", async () => {
-    const mod = await import("../dist/installer/agent-provision.js");
+    const mod = await import("../src/installer/agent-provision.js");
     const workflowDir = path.join(tmpDir, "workflow");
     await fs.mkdir(workflowDir, { recursive: true });
 
-    const workflow = {
+    const workflow: WorkflowSpec = {
       id: "test-wf5",
       name: "Test",
       steps: [],
       agents: [
         {
           id: "verifier",
-          role: "verify",
+          role: "verification",
           workspace: {
             baseDir: "agents/verifier",
             skills: ["agent-browser"],
@@ -208,7 +209,7 @@ describe("External skill installation", () => {
         },
         {
           id: "planner",
-          role: "planning",
+          role: "analysis",
           workspace: {
             baseDir: "agents/planner",
             skills: [],
@@ -219,7 +220,7 @@ describe("External skill installation", () => {
     };
 
     const results = await mod.provisionAgents({
-      workflow: workflow as any,
+      workflow,
       workflowDir,
       installSkill: true,
     });

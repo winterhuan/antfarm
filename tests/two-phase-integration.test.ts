@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildPollingPrompt, buildWorkPrompt } from "../dist/installer/agent-cron.js";
+import { buildPollingPrompt, buildWorkPrompt } from "../src/installer/agent-cron.js";
 
 /**
  * Integration tests for the full two-phase polling flow.
@@ -72,10 +72,10 @@ describe("two-phase-integration", () => {
 
   // AC4: Work prompt contains full execution instructions
   describe("work prompt has full execution instructions", () => {
-    it("contains step complete with file-pipe pattern", () => {
+    it("contains step complete with heredoc pattern", () => {
       const prompt = buildWorkPrompt("feature-dev", "developer");
-      assert.ok(prompt.includes("antfarm-step-output.txt"), "file-pipe pattern");
       assert.ok(prompt.includes("step complete"), "step complete command");
+      assert.ok(prompt.includes("ANTFARM_EOF"), "heredoc delimiter");
     });
 
     it("contains step fail instructions", () => {
@@ -92,7 +92,7 @@ describe("two-phase-integration", () => {
     it("contains all 3 rules", () => {
       const prompt = buildWorkPrompt("feature-dev", "developer");
       assert.ok(prompt.includes("NEVER end your session"));
-      assert.ok(prompt.includes("Write output to a file first"));
+      assert.ok(prompt.includes("heredoc into stdin"));
       assert.ok(prompt.includes("step fail with an explanation"));
     });
 
@@ -140,7 +140,7 @@ describe("two-phase-integration", () => {
     it("original buildAgentPrompt pattern still works for non-polling usage", async () => {
       // The original buildAgentPrompt function should still exist for backward compat
       // Import it dynamically to check
-      const mod = await import("../dist/installer/agent-cron.js");
+      const mod = await import("../src/installer/agent-cron.js");
       // setupAgentCrons and removeAgentCrons should still be exported
       assert.ok(typeof mod.setupAgentCrons === "function", "setupAgentCrons exported");
       assert.ok(typeof mod.removeAgentCrons === "function", "removeAgentCrons exported");

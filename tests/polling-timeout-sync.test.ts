@@ -11,7 +11,7 @@
 
 import path from "node:path";
 import { readFile } from "node:fs/promises";
-import { loadWorkflowSpec } from "../dist/installer/workflow-spec.js";
+import { loadWorkflowSpec } from "../src/installer/workflow-spec.js";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
@@ -57,7 +57,9 @@ describe("polling timeout sync across all workflows", () => {
     for (const name of WORKFLOW_NAMES) {
       const dir = path.join(WORKFLOWS_DIR, name);
       const spec = await loadWorkflowSpec(dir);
-      timeouts.add(spec.polling.timeoutSeconds);
+      const timeout = spec.polling?.timeoutSeconds;
+      assert.ok(timeout !== undefined, `${name} has no polling timeout`);
+      timeouts.add(timeout);
     }
     assert.equal(
       timeouts.size,

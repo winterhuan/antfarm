@@ -4,8 +4,8 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { getDb } from "../dist/db.js";
-import { claimStep } from "../dist/installer/step-ops.js";
+import { getDb } from "../src/db.js";
+import { claimStep } from "../src/installer/step-ops.js";
 import { randomUUID } from "node:crypto";
 
 /**

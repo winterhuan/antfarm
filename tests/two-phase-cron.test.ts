@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 // Since we're using ESM, we'll test the exported functions directly
 // and verify behavior through the buildPollingPrompt output + setupAgentCrons logic
 
-import { buildPollingPrompt } from "../dist/installer/agent-cron.js";
+import { buildPollingPrompt } from "../src/installer/agent-cron.js";
 
 describe("two-phase-cron-setup", () => {
   describe("buildPollingPrompt with work model", () => {

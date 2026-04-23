@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isFrontendChange } from '../src/lib/frontend-detect.ts';
+import { isFrontendChange } from '../src/lib/frontend-detect.js';
 
 describe('isFrontendChange', () => {
   it('returns true for .html files', () => {

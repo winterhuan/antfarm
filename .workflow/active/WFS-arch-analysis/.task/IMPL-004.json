@@ -1,0 +1,370 @@
+{
+  "id": "IMPL-004",
+  "title": "Unify Backend interface with complete lifecycle methods",
+  "description": "Enhance Backend interface with configureAgent, removeAgent, validate, capabilities. Add spawnAgent?() optional for interactive backends. Implement BackendCapabilities with supportsPerToolDeny, supportsSandbox, schedulerDriven, supportsCronManagement. Create PermissionAdapter pattern for per-backend role constraints. Write parameterized contract tests for all 4 backends.",
+  "status": "pending",
+  "type": "enhancement",
+  "action": "Implement",
+  "priority": "high",
+  "effort": "large",
+  "scope": ["src/backend/interface.ts", "src/backend/index.ts", "src/backend/openclaw.ts", "src/backend/hermes.ts", "src/backend/claude-code.ts", "src/backend/codex.ts"],
+  "focus_paths": [
+    "src/backend/",
+    "src/installer/agent-cron.ts",
+    "src/installer/install.ts"
+  ],
+  "depends_on": ["IMPL-001"],
+  "parallel_group": 2,
+
+  "convergence": {
+    "criteria": [
+      "Backend interface extended with 4 new methods",
+      "BackendCapabilities interface defined with 4 boolean flags",
+      "PermissionAdapter interface created",
+      "All 4 backends implement new interface",
+      "30 parameterized contract tests pass",
+      "No breaking changes to existing 4 lifecycle methods"
+    ],
+    "verification": "npm test -- backend && npx tsx --test src/backend/*.test.ts",
+    "definition_of_done": "Unified backend interface with capability-based behavior and full test coverage"
+  },
+
+  "files": [
+    {
+      "path": "src/backend/interface.ts",
+      "action": "modify",
+      "target": "Backend interface",
+      "change": "Add configureAgent, removeAgent, validate, capabilities; spawnAgent? optional"
+    },
+    {
+      "path": "src/backend/interface.ts",
+      "action": "create",
+      "target": "BackendCapabilities",
+      "change": "Interface with 4 capability flags"
+    },
+    {
+      "path": "src/backend/interface.ts",
+      "action": "create",
+      "target": "PermissionAdapter",
+      "change": "applyRoleConstraints and removeRoleConstraints methods"
+    },
+    {
+      "path": "src/backend/interface.ts",
+      "action": "create",
+      "target": "ValidationResult",
+      "change": "Result type for validate() method"
+    },
+    {
+      "path": "src/backend/openclaw.ts",
+      "action": "modify",
+      "target": "OpenClawBackend",
+      "change": "Implement new methods, capabilities, PermissionAdapter"
+    },
+    {
+      "path": "src/backend/hermes.ts",
+      "action": "modify",
+      "target": "HermesBackend",
+      "change": "Implement new methods, capabilities, PermissionAdapter"
+    },
+    {
+      "path": "src/backend/claude-code.ts",
+      "action": "modify",
+      "target": "ClaudeCodeBackend",
+      "change": "Implement new methods, capabilities, PermissionAdapter, spawnAgent?"
+    },
+    {
+      "path": "src/backend/codex.ts",
+      "action": "modify",
+      "target": "CodexBackend",
+      "change": "Implement new methods, capabilities, PermissionAdapter, spawnAgent?"
+    },
+    {
+      "path": "src/backend/backend-contract.test.ts",
+      "action": "create",
+      "target": "Parameterized contract tests",
+      "change": "30 tests covering all backends uniformly"
+    }
+  ],
+
+  "implementation": [
+    {
+      "step": 1,
+      "title": "Extend Backend interface",
+      "description": "Add new methods and types to interface.ts",
+      "modification_points": [
+        "Add configureAgent(workflow, agent): Promise<void>",
+        "Add removeAgent(workflowId, agentId): Promise<void>",
+        "Add validate(workflow): Promise<ValidationResult>",
+        "Add readonly capabilities: BackendCapabilities",
+        "Add optional spawnAgent?(workflow, agent, prompt): Promise<SpawnResult>",
+        "Define BackendCapabilities with 4 flags",
+        "Define PermissionAdapter interface"
+      ],
+      "logic_flow": [
+        "Read current interface.ts",
+        "Add new method signatures",
+        "Define new interfaces",
+        "Export additions"
+      ],
+      "depends_on": [],
+      "output": "interface_extended"
+    },
+    {
+      "step": 2,
+      "title": "Implement OpenClawBackend extensions",
+      "description": "Add new methods and capabilities to OpenClaw",
+      "modification_points": [
+        "ConfigureAgent: provision with ROLE_POLICIES",
+        "RemoveAgent: cron deletion",
+        "Validate: check agent tool permissions",
+        "Capabilities: { supportsPerToolDeny: true, supportsSandbox: false, schedulerDriven: false, supportsCronManagement: true }",
+        "PermissionAdapter with ROLE_POLICIES application"
+      ],
+      "logic_flow": [
+        "Extend OpenClawBackend class",
+        "Implement new methods",
+        "Add capability flags"
+      ],
+      "depends_on": [1],
+      "output": "openclaw_extended"
+    },
+    {
+      "step": 3,
+      "title": "Implement HermesBackend extensions",
+      "description": "Add new methods and capabilities to Hermes",
+      "modification_points": [
+        "ConfigureAgent: profile creation + cron",
+        "RemoveAgent: profile deletion + cron",
+        "Validate: verify profile names",
+        "Capabilities: { supportsPerToolDeny: false, supportsSandbox: false, schedulerDriven: false, supportsCronManagement: true }",
+        "PermissionAdapter with soft guardrails (prompt injection)"
+      ],
+      "logic_flow": [
+        "Extend HermesBackend class",
+        "Implement new methods",
+        "Add capability flags"
+      ],
+      "depends_on": [2],
+      "output": "hermes_extended"
+    },
+    {
+      "step": 4,
+      "title": "Implement ClaudeCodeBackend extensions",
+      "description": "Add new methods, capabilities, and spawnAgent to Claude Code",
+      "modification_points": [
+        "ConfigureAgent: subagent file creation",
+        "RemoveAgent: subagent removal",
+        "Validate: check .claude/ writable",
+        "Capabilities: { supportsPerToolDeny: true, supportsSandbox: false, schedulerDriven: true, supportsCronManagement: false }",
+        "PermissionAdapter with --disallowedTools",
+        "spawnAgent implementation using claude -p"
+      ],
+      "logic_flow": [
+        "Extend ClaudeCodeBackend class",
+        "Implement new methods",
+        "Add spawnAgent implementation"
+      ],
+      "depends_on": [3],
+      "output": "claude_extended"
+    },
+    {
+      "step": 5,
+      "title": "Implement CodexBackend extensions",
+      "description": "Add new methods, capabilities, and spawnAgent to Codex",
+      "modification_points": [
+        "ConfigureAgent: config.toml profile creation",
+        "RemoveAgent: config.toml cleanup",
+        "Validate: verify ~/.codex/ writable",
+        "Capabilities: { supportsPerToolDeny: false, supportsSandbox: true, schedulerDriven: true, supportsCronManagement: false }",
+        "PermissionAdapter with sandbox_mode",
+        "spawnAgent implementation using codex exec"
+      ],
+      "logic_flow": [
+        "Extend CodexBackend class",
+        "Implement new methods",
+        "Add spawnAgent implementation"
+      ],
+      "depends_on": [4],
+      "output": "codex_extended"
+    },
+    {
+      "step": 6,
+      "title": "Create parameterized contract tests",
+      "description": "Write tests that run against all 4 backends uniformly",
+      "modification_points": [
+        "30 test cases covering install/uninstall/configure/remove/validate",
+        "Parameterized test runner for each backend",
+        "Capability-specific test skipping"
+      ],
+      "logic_flow": [
+        "Create backend-contract.test.ts",
+        "Define test matrix",
+        "Implement parameterized tests",
+        "Run against all backends"
+      ],
+      "depends_on": [5],
+      "output": "contract_tests"
+    },
+    {
+      "step": 7,
+      "title": "Update Backend factory",
+      "description": "Ensure createBackend returns enhanced backends",
+      "modification_points": [
+        "Update createBackend if needed",
+        "Update exports in index.ts"
+      ],
+      "logic_flow": [
+        "Review index.ts",
+        "Update exports",
+        "Run all tests"
+      ],
+      "depends_on": [6],
+      "output": "factory_updated"
+    }
+  ],
+
+  "pre_analysis": [
+    {
+      "step": "load_context_package",
+      "action": "Load context for backend analysis",
+      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "output_to": "context_package",
+      "on_error": "fail"
+    },
+    {
+      "step": "load_feature_specs",
+      "action": "Load F-003 backend analysis",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.brainstorming/system-architect/analysis-F-003-backend-interface-unify.md')"
+      ],
+      "output_to": "brainstorm_context",
+      "on_error": "skip_optional"
+    },
+    {
+      "step": "examine_backend_files",
+      "action": "Read current backend implementations",
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/src/backend/interface.ts')",
+        "Read('/home/maiscrm/workspace/antfarm/src/backend/openclaw.ts')",
+        "Read('/home/maiscrm/workspace/antfarm/src/backend/hermes.ts')",
+        "Read('/home/maiscrm/workspace/antfarm/src/backend/claude-code.ts')",
+        "Read('/home/maiscrm/workspace/antfarm/src/backend/codex.ts')"
+      ],
+      "output_to": "backend_source"
+    },
+    {
+      "step": "inherit_from_error_hierarchy",
+      "action": "Use error classes from IMPL-001",
+      "commands": [],
+      "output_to": "error_classes"
+    }
+  ],
+
+  "artifacts": [
+    {
+      "type": "feature_spec",
+      "source": "brainstorm_feature_specs",
+      "path": ".brainstorming/system-architect/analysis-F-003-backend-interface-unify.md",
+      "feature_id": "F-003",
+      "priority": "highest",
+      "usage": "Backend interface design and migration path"
+    }
+  ],
+
+  "inherited": {
+    "from": "IMPL-001",
+    "context": [
+      "AntfarmError hierarchy for backend errors",
+      "BackendError, ProfileError classes for error handling"
+    ]
+  },
+
+  "test": {
+    "commands": {
+      "run_tests": "npx tsx --test src/backend/*.test.ts",
+      "run_coverage": "npx tsx --test --coverage src/backend/*.test.ts"
+    },
+    "unit": [
+      "Install method works on all backends",
+      "ConfigureAgent adds agent correctly",
+      "RemoveAgent cleans up agent",
+      "Validate returns correct result",
+      "Capabilities reflect backend features",
+      "PermissionAdapter applies constraints",
+      "SpawnAgent works on ClaudeCode/Codex"
+    ],
+    "coverage_target": 80,
+    "success_metrics": [
+      "30 contract tests pass",
+      "All 4 backends have 80%+ coverage"
+    ]
+  },
+
+  "risks": [
+    {
+      "description": "Backend implementations may have deep coupling to existing patterns",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Keep existing 4 methods unchanged; only add new ones"
+    },
+    {
+      "description": "spawnAgent implementation may differ significantly between ClaudeCode and Codex",
+      "probability": "High",
+      "impact": "Low",
+      "mitigation": "Optional method allows backend-specific implementation"
+    },
+    {
+      "description": "PermissionAdapter pattern may not fit all backends equally",
+      "probability": "Medium",
+      "impact": "Medium",
+      "mitigation": "Backend-specific adapter implementations"
+    }
+  ],
+
+  "code_skeleton": {
+    "interfaces": [
+      {
+        "name": "BackendCapabilities",
+        "definition": "{ supportsPerToolDeny: boolean; supportsSandbox: boolean; schedulerDriven: boolean; supportsCronManagement: boolean }",
+        "purpose": "Feature flags for backend capabilities"
+      },
+      {
+        "name": "PermissionAdapter",
+        "definition": "{ applyRoleConstraints(agent): Promise<void>; removeRoleConstraints(agentId): Promise<void> }",
+        "purpose": "Backend-specific permission handling"
+      }
+    ],
+    "classes": [
+      {
+        "name": "OpenClawBackend",
+        "purpose": "Enhanced with PermissionAdapter using ROLE_POLICIES",
+        "methods": ["configureAgent", "removeAgent", "validate", "capabilities"]
+      }
+    ]
+  },
+
+  "meta": {
+    "type": "enhancement",
+    "agent": "@code-developer",
+    "execution_group": "phase-2-parallel",
+    "module": "backend",
+    "execution_config": {
+      "method": "agent",
+      "cli_tool": null,
+      "enable_resume": false
+    }
+  },
+
+  "cli_execution": {
+    "id": "WFS-arch-analysis-IMPL-004",
+    "strategy": "resume",
+    "resume_from": "WFS-arch-analysis-IMPL-001"
+  },
+
+  "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
+  "source": {
+    "tool": "workflow-plan",
+    "session_id": "WFS-arch-analysis",
+    "feature_id": "F-003"
+  }
+}

@@ -51,7 +51,7 @@ describe("gateway-api password auth mode (#116)", () => {
 
     // Re-import to pick up the new config
     // Use a cache-busting query param to force re-evaluation
-    const mod = await import(`../dist/installer/gateway-api.js?v=${Date.now()}`);
+    const mod = await import(`../src/installer/gateway-api.js?v=${Date.now()}`);
 
     const originalFetch = globalThis.fetch;
     let capturedHeaders: Record<string, string> = {};
@@ -102,7 +102,7 @@ describe("gateway-api password auth mode (#116)", () => {
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(testConfig), "utf-8");
 
-    const mod = await import(`../dist/installer/gateway-api.js?v=token-${Date.now()}`);
+    const mod = await import(`../src/installer/gateway-api.js?v=token-${Date.now()}`);
 
     const originalFetch = globalThis.fetch;
     let capturedHeaders: Record<string, string> = {};
@@ -155,7 +155,7 @@ describe("gateway-api password auth mode (#116)", () => {
 
     process.env.OPENCLAW_GATEWAY_PASSWORD = "env-password-secret";
 
-    const mod = await import(`../dist/installer/gateway-api.js?v=env-${Date.now()}`);
+    const mod = await import(`../src/installer/gateway-api.js?v=env-${Date.now()}`);
 
     const originalFetch = globalThis.fetch;
     let capturedHeaders: Record<string, string> = {};
@@ -206,7 +206,7 @@ describe("gateway-api password auth mode (#116)", () => {
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(testConfig), "utf-8");
 
-    const mod = await import(`../dist/installer/gateway-api.js?v=check-${Date.now()}`);
+    const mod = await import(`../src/installer/gateway-api.js?v=check-${Date.now()}`);
 
     const originalFetch = globalThis.fetch;
     let capturedHeaders: Record<string, string> = {};

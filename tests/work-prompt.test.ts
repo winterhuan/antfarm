@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkPrompt } from "../dist/installer/agent-cron.js";
+import { buildWorkPrompt } from "../src/installer/agent-cron.js";
 
 describe("buildWorkPrompt", () => {
   it("contains step complete instructions", () => {
