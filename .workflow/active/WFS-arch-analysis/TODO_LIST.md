@@ -44,7 +44,7 @@
 
 ## Phase 5: Test Coverage
 
-- [ ] **IMPL-008**: Fill unit test coverage gaps to 80%+ → [📋](./.task/IMPL-008.json)  
+- [x] **IMPL-008**: Fill unit test coverage gaps to 80%+ → [📋](./.task/IMPL-008.json)  
   *F-007: 241 tests, installer 85%, backend 80%, cli 75%, co-located*
 
 ---
