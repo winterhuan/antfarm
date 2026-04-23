@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
-import type { Backend } from './interface.js';
+import type { Backend, BackendCapabilities, ValidationResult, PermissionAdapter, SpawnResult } from './interface.js';
 import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
 import { buildPollingPrompt } from '../installer/agent-cron.js';
 import { installAntfarmSkillForHermes } from '../installer/skill-install.js';
@@ -34,6 +34,93 @@ interface AntfarmMarker {
 }
 
 export class HermesBackend implements Backend {
+  readonly capabilities: BackendCapabilities = {
+    supportsPerToolDeny: false,  // Toolset only, no per-tool deny
+    supportsSandbox: false,
+    schedulerDriven: false,
+    supportsCronManagement: true
+  };
+
+  readonly permissionAdapter: PermissionAdapter = {
+    async applyRoleConstraints(_agent: WorkflowAgent): Promise<void> {
+      // Hermes has no hard tool-level deny capability
+      // Soft guardrails are applied via prompt injection only
+      // This is handled in buildPollingPrompt
+    },
+
+    async removeRoleConstraints(_agentId: string): Promise<void> {
+      // No explicit cleanup needed - role constraints are prompt-based
+    }
+  };
+
+  async validate(workflow: WorkflowSpec): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Verify profile names are valid
+    for (const agent of workflow.agents) {
+      const profileName = getProfileName(workflow.id, agent.id);
+
+      // Check for unsafe characters in profile names
+      if (workflow.id.includes('_') || agent.id.includes('_')) {
+        errors.push(`Workflow or agent ID contains underscore: "${workflow.id}" / "${agent.id}"`);
+      }
+      if (profileName.includes('/') || profileName.includes('\\') || profileName.includes('"')) {
+        errors.push(`Invalid profile name characters: "${profileName}"`);
+      }
+
+      // Validate agent ID is not empty
+      if (!agent.id || agent.id.trim() === '') {
+        errors.push(`Agent with empty ID found`);
+      }
+    }
+
+    // Warn about Hermes limitations
+    warnings.push('Hermes does not support per-tool deny lists - using soft guardrails only');
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  async configureAgent(workflow: WorkflowSpec, agent: WorkflowAgent): Promise<void> {
+    const profileName = getProfileName(workflow.id, agent.id);
+
+    // Create profile
+    await this.createProfile(workflow.id, profileName);
+
+    // Create workspace
+    await this.createWorkspace(workflow.id, profileName, workflow, agent, '');
+
+    // Configure profile settings
+    await this.configureProfile(profileName, agent);
+
+    // Setup cron
+    await this.setupCron(profileName, workflow.id, agent, workflow);
+  }
+
+  async removeAgent(workflowId: string, agentId: string): Promise<void> {
+    const profileName = getProfileName(workflowId, agentId);
+
+    // Verify ownership
+    const isOwned = await this.verifyProfileOwnership(workflowId, profileName);
+    if (!isOwned) {
+      throw new Error(`Profile "${profileName}" does not belong to workflow "${workflowId}"`);
+    }
+
+    // Remove cron job
+    const cronName = `antfarm/${workflowId}/${agentId}`;
+    await this.removeCronByName(profileName, cronName).catch(() => {});
+
+    // Stop gateway if running
+    await this.exec('hermes', ['--profile', profileName, 'gateway', 'stop']).catch(() => {});
+
+    // Delete profile
+    await this.exec('hermes', ['profile', 'delete', profileName, '-y']);
+  }
+
   constructor(private readonly exec: HermesExec = defaultExec as HermesExec) {}
 
   private async getHermesProfilesDir(): Promise<string> {

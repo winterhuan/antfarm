@@ -118,3 +118,39 @@ export function nextRunNumber(): number {
 export function getDbPath(): string {
   return resolveDbPath();
 }
+
+/**
+ * Initialize the database with a custom path (for testing).
+ * This closes any existing connection first and resets the singleton.
+ */
+export function initDb(dbPath: string): DatabaseSync {
+  // Close existing connection
+  if (_db) {
+    try { _db.close(); } catch {}
+    _db = null;
+  }
+  // Reset the singleton state to force new connection
+  _dbPath = dbPath;
+  _dbOpenedAt = 0;
+  // Create and return new connection
+  const newDb = new DatabaseSync(dbPath);
+  _db = newDb;
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  newDb.exec("PRAGMA journal_mode=WAL");
+  newDb.exec("PRAGMA foreign_keys=ON");
+  migrate(newDb);
+  _dbOpenedAt = Date.now();
+  return newDb;
+}
+
+/**
+ * Close the current database connection (for testing).
+ */
+export function closeDb(): void {
+  if (_db) {
+    try { _db.close(); } catch {}
+    _db = null;
+    _dbPath = null;
+    _dbOpenedAt = 0;
+  }
+}

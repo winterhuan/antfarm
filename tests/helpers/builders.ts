@@ -164,6 +164,9 @@ export interface BackendSpy extends Backend {
   uninstallCalls: Array<{ workflowId: string }>;
   startRunCalls: Array<{ workflow: WorkflowSpec }>;
   stopRunCalls: Array<{ workflow: WorkflowSpec }>;
+  configureAgentCalls: Array<{ workflow: WorkflowSpec; agent: WorkflowAgent }>;
+  removeAgentCalls: Array<{ workflowId: string; agentId: string }>;
+  validateCalls: Array<{ workflow: WorkflowSpec }>;
   reset: () => void;
 }
 
@@ -173,6 +176,27 @@ export function buildBackendSpy(): BackendSpy {
     uninstallCalls: [],
     startRunCalls: [],
     stopRunCalls: [],
+    configureAgentCalls: [],
+    removeAgentCalls: [],
+    validateCalls: [],
+
+    // Backend capabilities
+    capabilities: {
+      supportsPerToolDeny: true,
+      supportsSandbox: false,
+      schedulerDriven: false,
+      supportsCronManagement: true,
+    },
+
+    // Permission adapter
+    permissionAdapter: {
+      async applyRoleConstraints(agent: WorkflowAgent): Promise<void> {
+        // Spy implementation - no-op
+      },
+      async removeRoleConstraints(agentId: string): Promise<void> {
+        // Spy implementation - no-op
+      },
+    },
 
     async install(workflow: WorkflowSpec, sourceDir: string): Promise<void> {
       spy.installCalls.push({ workflow, sourceDir });
@@ -190,11 +214,27 @@ export function buildBackendSpy(): BackendSpy {
       spy.stopRunCalls.push({ workflow });
     },
 
+    async configureAgent(workflow: WorkflowSpec, agent: WorkflowAgent): Promise<void> {
+      spy.configureAgentCalls.push({ workflow, agent });
+    },
+
+    async removeAgent(workflowId: string, agentId: string): Promise<void> {
+      spy.removeAgentCalls.push({ workflowId, agentId });
+    },
+
+    async validate(workflow: WorkflowSpec): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
+      spy.validateCalls.push({ workflow });
+      return { valid: true, errors: [], warnings: [] };
+    },
+
     reset(): void {
       spy.installCalls = [];
       spy.uninstallCalls = [];
       spy.startRunCalls = [];
       spy.stopRunCalls = [];
+      spy.configureAgentCalls = [];
+      spy.removeAgentCalls = [];
+      spy.validateCalls = [];
     },
   };
 

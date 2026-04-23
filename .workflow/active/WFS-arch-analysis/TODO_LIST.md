@@ -20,7 +20,7 @@
 - [ ] **IMPL-003**: Decompose step-ops.ts into 5 focused modules → [📋](./.task/IMPL-003.json)  
   *F-001: 1103 lines → step-parser/template/lifecycle/loop/utils, barrel re-export*
   
-- [ ] **IMPL-004**: Unify Backend interface with complete lifecycle methods → [📋](./.task/IMPL-004.json)  
+- [x] **IMPL-004**: Unify Backend interface with complete lifecycle methods → [📋](./.task/IMPL-004.json) | [✅](./.summaries/IMPL-004-summary.md)  
   *F-003: configureAgent/removeAgent/validate/capabilities, 30 contract tests*
 
 ---

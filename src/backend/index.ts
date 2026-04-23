@@ -20,6 +20,10 @@ export function createBackend(type: BackendType): Backend {
 }
 
 export { groupAgentsByBackend } from './group-agents.js';
-export type { Backend, BackendType } from './interface.js';
+export type { Backend, BackendType, BackendCapabilities, ValidationResult, PermissionAdapter, SpawnResult } from './interface.js';
+export { OpenClawBackend } from './openclaw.js';
+export { HermesBackend } from './hermes.js';
+export { ClaudeCodeBackend } from './claude-code.js';
+export { CodexBackend } from './codex.js';
 export { resolveBackendConfig, validateBackendType } from './config-resolver.js';
 export type { BackendConfig, ResolvedBackendConfig } from './config-resolver.js';

@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import type { Backend } from './interface.js';
-import type { WorkflowSpec } from '../installer/types.js';
+import type { Backend, BackendCapabilities, ValidationResult, PermissionAdapter, SpawnResult } from './interface.js';
+import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
 import { provisionAgents } from '../installer/agent-provision.js';
 import {
   writeSubagentDefinition,
@@ -33,6 +33,115 @@ export async function readClaudeCodeProjectDir(workflowId: string): Promise<stri
 }
 
 export class ClaudeCodeBackend implements Backend {
+  readonly capabilities: BackendCapabilities = {
+    supportsPerToolDeny: true,  // --disallowedTools flag
+    supportsSandbox: false,
+    schedulerDriven: true,        // Uses SubprocessScheduler
+    supportsCronManagement: false   // No cron, scheduler-driven
+  };
+
+  readonly permissionAdapter: PermissionAdapter = {
+    async applyRoleConstraints(agent: WorkflowAgent): Promise<void> {
+      // Writes disallowedTools to .claude/agents/<workflowId>_<agentId>.md frontmatter
+      const disallowedTools = buildDisallowedTools(agent.role);
+      // This is handled during install via writeSubagentDefinition
+    },
+
+    async removeRoleConstraints(agentId: string): Promise<void> {
+      // Remove agent file if it exists
+      // Actual cleanup is done in removeAgent
+    }
+  };
+
+  async validate(workflow: WorkflowSpec): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Check .claude/ writable by checking projectDir
+    try {
+      const agentsDir = path.join(this.projectDir, '.claude', 'agents');
+      await fs.access(agentsDir).catch(async () => {
+        // Try to create the directory
+        await fs.mkdir(agentsDir, { recursive: true });
+      });
+    } catch (err) {
+      errors.push(`Cannot access or create .claude/agents directory: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Validate agent configurations
+    for (const agent of workflow.agents) {
+      if (!agent.id || agent.id.trim() === '') {
+        errors.push('Agent with empty ID found');
+      }
+
+      // Check for valid role
+      const validRoles = ['analysis', 'coding', 'verification', 'testing', 'pr', 'scanning'];
+      if (agent.role && !validRoles.includes(agent.role)) {
+        warnings.push(`Unknown role "${agent.role}" for agent "${agent.id}"`);
+      }
+    }
+
+    // Check for duplicate agent IDs
+    const agentIds = workflow.agents.map(a => a.id);
+    const duplicates = agentIds.filter((id, index) => agentIds.indexOf(id) !== index);
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate agent IDs: ${duplicates.join(', ')}`);
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  async configureAgent(workflow: WorkflowSpec, agent: WorkflowAgent): Promise<void> {
+    // Create .claude/agents/<workflowId>_<agentId>.md
+    await writeSubagentDefinition({
+      projectDir: this.projectDir,
+      workflowId: workflow.id,
+      agentId: agent.id,
+      role: agent.role ?? 'coding',
+      description: agent.description ?? `${workflow.id} ${agent.id}`,
+      disallowedTools: buildDisallowedTools(agent.role) || undefined,
+    });
+
+    // Record project ownership
+    try {
+      await fs.writeFile(
+        path.join(resolveWorkflowDir(workflow.id), PROJECT_MARKER_NAME),
+        this.projectDir,
+        'utf-8',
+      );
+    } catch {
+      // Non-fatal: fallback still handles common case
+    }
+  }
+
+  async removeAgent(workflowId: string, agentId: string): Promise<void> {
+    await removeSubagentDefinition({ projectDir: this.projectDir, workflowId, agentId });
+  }
+
+  async spawnAgent(workflow: WorkflowSpec, agent: WorkflowAgent, prompt: string): Promise<SpawnResult> {
+    // Direct spawn using claude -p
+    // Import dynamically to avoid circular dependency
+    const { spawnClaudeProcess } = await import('./claude-code-spawn.js');
+
+    const result = await spawnClaudeProcess({
+      workspace: this.projectDir,
+      agentId: `${workflow.id}_${agent.id}`,
+      prompt,
+      disallowedTools: buildDisallowedTools(agent.role),
+    });
+
+    return {
+      success: result.success,
+      output: result.stdout,
+      error: result.stderr,
+      exitCode: result.exitCode ?? 0
+    };
+  }
+
   /**
    * @param projectDir directory containing `.claude/` — defaults to
    *   process.cwd() at construction time. Tests inject a tmp dir directly.

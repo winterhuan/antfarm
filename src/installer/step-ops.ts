@@ -1,3 +1,8 @@
+/**
+ * @deprecated Use src/installer/step-ops/index.ts barrel export instead.
+ * This file will be removed after migration period.
+ */
+
 import { getDb } from "../db.js";
 import type { LoopConfig, Story } from "./types.js";
 import fs from "node:fs";

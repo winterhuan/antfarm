@@ -1,4 +1,4 @@
-import type { Backend } from './interface.js';
+import type { Backend, BackendCapabilities, ValidationResult, PermissionAdapter, SpawnResult } from './interface.js';
 import type { WorkflowSpec, WorkflowAgent, AgentRole } from '../installer/types.js';
 import { provisionAgents } from '../installer/agent-provision.js';
 import { createAgentCronJob, deleteAgentCronJobs } from '../installer/gateway-api.js';
@@ -185,6 +185,92 @@ export function getMaxRoleTimeoutSeconds(): number {
 }
 
 export class OpenClawBackend implements Backend {
+  readonly capabilities: BackendCapabilities = {
+    supportsPerToolDeny: true,
+    supportsSandbox: false,
+    schedulerDriven: false,
+    supportsCronManagement: true
+  };
+
+  readonly permissionAdapter: PermissionAdapter = {
+    async applyRoleConstraints(agent: WorkflowAgent): Promise<void> {
+      const role = agent.role ?? 'coding';
+      const policy = ROLE_POLICIES[role];
+      if (!policy) {
+        return;
+      }
+      // OpenClaw applies constraints via agent config tools.deny
+      // This is handled during install via buildToolsConfig
+    },
+
+    async removeRoleConstraints(_agentId: string): Promise<void> {
+      // OpenClaw cleanup is handled via config file updates
+      // No additional cleanup needed
+    }
+  };
+
+  async validate(workflow: WorkflowSpec): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Validate agent tool permissions against ROLE_POLICIES
+    for (const agent of workflow.agents) {
+      const role = agent.role ?? 'coding';
+      if (!ROLE_POLICIES[role]) {
+        errors.push(`Unknown role "${role}" for agent "${agent.id}"`);
+      }
+
+      // Check for agent ID collisions
+      if (!agent.id || agent.id.trim() === '') {
+        errors.push(`Agent with empty ID found`);
+      }
+    }
+
+    // Check for duplicate agent IDs
+    const agentIds = workflow.agents.map(a => a.id);
+    const duplicates = agentIds.filter((id, index) => agentIds.indexOf(id) !== index);
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate agent IDs: ${duplicates.join(', ')}`);
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  async configureAgent(workflow: WorkflowSpec, agent: WorkflowAgent): Promise<void> {
+    // Provision agent with ROLE_POLICIES constraints
+    const role = agent.role ?? inferRole(agent.id);
+    const policy = ROLE_POLICIES[role];
+
+    // Create or update cron job for this agent
+    const agentId = `${workflow.id}_${agent.id}`;
+    const cronName = `antfarm/${workflow.id}/${agent.id}`;
+
+    await createAgentCronJob({
+      name: cronName,
+      schedule: { kind: 'every', everyMs: 300000 },
+      sessionTarget: 'isolated',
+      agentId,
+      payload: {
+        kind: 'agentTurn',
+        message: buildPollingPrompt(workflow.id, agent.id, undefined, role),
+        model: agent.model ?? 'default',
+        timeoutSeconds: agent.timeoutSeconds ?? policy?.timeoutSeconds ?? 1800,
+      },
+      delivery: { mode: 'none' },
+      enabled: true,
+    });
+  }
+
+  async removeAgent(workflowId: string, agentId: string): Promise<void> {
+    // Delete cron job for this specific agent
+    const cronName = `antfarm/${workflowId}/${agentId}`;
+    await deleteAgentCronJobs(cronName);
+  }
+
   async install(workflow: WorkflowSpec, sourceDir: string): Promise<void> {
     // Provision agent workspaces
     const provisioned = await provisionAgents({

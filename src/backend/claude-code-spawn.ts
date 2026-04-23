@@ -1,5 +1,6 @@
 import type { AgentRole } from '../installer/types.js';
 import { buildDisallowedTools } from './claude-code-policy.js';
+import { spawn } from 'node:child_process';
 
 export interface ClaudeCodeSpawnOptions {
   role: AgentRole | undefined;
@@ -8,6 +9,20 @@ export interface ClaudeCodeSpawnOptions {
   sessionId: string;
   maxBudgetUsd: number;
   model: string;
+}
+
+export interface ClaudeProcessSpawnOptions {
+  workspace: string;
+  agentId: string;
+  prompt: string;
+  disallowedTools?: string;
+}
+
+export interface ClaudeProcessSpawnResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode?: number;
 }
 
 /**
@@ -37,4 +52,61 @@ export function buildClaudeCodeArgv(opts: ClaudeCodeSpawnOptions): string[] {
   }
   argv.push('--', opts.prompt);
   return argv;
+}
+
+/**
+ * Spawn a Claude Code process for interactive execution.
+ * Returns the process result including stdout, stderr, and exit code.
+ */
+export async function spawnClaudeProcess(opts: ClaudeProcessSpawnOptions): Promise<ClaudeProcessSpawnResult> {
+  const argv: string[] = [
+    '-p',
+    '--bare',
+    '--no-session-persistence',
+    '--output-format', 'stream-json',
+    '--permission-mode', 'bypassPermissions',
+    '--cd', opts.workspace,
+  ];
+
+  if (opts.disallowedTools) {
+    argv.push('--disallowedTools', opts.disallowedTools);
+  }
+
+  argv.push('--', opts.prompt);
+
+  return new Promise((resolve) => {
+    const proc = spawn('claude', argv, {
+      cwd: opts.workspace,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString('utf-8');
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString('utf-8');
+    });
+
+    proc.on('close', (code) => {
+      resolve({
+        success: code === 0,
+        stdout,
+        stderr,
+        exitCode: code ?? undefined,
+      });
+    });
+
+    proc.on('error', (err) => {
+      resolve({
+        success: false,
+        stdout,
+        stderr: `${stderr}\nProcess error: ${err.message}`,
+        exitCode: -1,
+      });
+    });
+  });
 }

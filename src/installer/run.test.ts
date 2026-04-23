@@ -72,6 +72,20 @@ function createSpyBackend(opts: {
         stopCalls.push(agentIds);
         await opts.onStop?.(agentIds);
       },
+      // New interface methods
+      configureAgent: async () => {},
+      removeAgent: async () => {},
+      validate: async () => ({ valid: true, errors: [], warnings: [] }),
+      capabilities: {
+        supportsPerToolDeny: true,
+        supportsSandbox: false,
+        schedulerDriven: false,
+        supportsCronManagement: true,
+      },
+      permissionAdapter: {
+        applyRoleConstraints: async () => {},
+        removeRoleConstraints: async () => {},
+      },
     },
     startCalls,
     stopCalls,

@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
-import type { Backend } from './interface.js';
-import type { WorkflowSpec } from '../installer/types.js';
+import type { Backend, BackendCapabilities, ValidationResult, PermissionAdapter, SpawnResult } from './interface.js';
+import type { WorkflowSpec, WorkflowAgent } from '../installer/types.js';
 import { provisionAgents } from '../installer/agent-provision.js';
 import {
   writeRoleOverlayFile,
@@ -32,6 +32,145 @@ export function getCodexProfileName(workflowId: string, agentId: string): string
 }
 
 export class CodexBackend implements Backend {
+  readonly capabilities: BackendCapabilities = {
+    supportsPerToolDeny: false,  // Sandbox is coarse, not per-tool
+    supportsSandbox: true,       // OS-level sandbox
+    schedulerDriven: true,       // Uses SubprocessScheduler
+    supportsCronManagement: false  // No cron
+  };
+
+  readonly permissionAdapter: PermissionAdapter = {
+    async applyRoleConstraints(agent: WorkflowAgent): Promise<void> {
+      // Set sandbox_mode in the role overlay file
+      // This is handled during install via writeRoleOverlayFile
+      const sandboxMode = getCodexSandboxMode(agent.role);
+      // sandboxMode is stored in the role overlay file
+    },
+
+    async removeRoleConstraints(agentId: string): Promise<void> {
+      // Cleanup is handled by removeRoleOverlayFiles
+    }
+  };
+
+  async validate(workflow: WorkflowSpec): Promise<ValidationResult> {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Verify ~/.codex/ writable
+    try {
+      const codexHome = this.getCodexHome();
+      await fs.access(codexHome).catch(async () => {
+        await fs.mkdir(codexHome, { recursive: true });
+      });
+
+      // Test write access
+      const testFile = path.join(codexHome, '.antfarm-test-write');
+      await fs.writeFile(testFile, 'test', 'utf-8');
+      await fs.unlink(testFile).catch(() => {});
+    } catch (err) {
+      errors.push(`Cannot write to Codex home directory: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Validate agent configurations
+    for (const agent of workflow.agents) {
+      // Check for unsafe agent keys
+      if (workflow.id.includes('_') || agent.id.includes('_')) {
+        errors.push(`Workflow or agent ID contains underscore: "${workflow.id}" / "${agent.id}"`);
+      }
+      const key = `${workflow.id}-${agent.id}`;
+      if (key.includes('/') || key.includes('..') || key.includes('\\') || key.includes('"')) {
+        errors.push(`Unsafe workflow/agent ID combination: "${workflow.id}" / "${agent.id}"`);
+      }
+
+      if (!agent.id || agent.id.trim() === '') {
+        errors.push('Agent with empty ID found');
+      }
+    }
+
+    // Check for duplicate agent IDs
+    const agentIds = workflow.agents.map(a => a.id);
+    const duplicates = agentIds.filter((id, index) => agentIds.indexOf(id) !== index);
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate agent IDs: ${duplicates.join(', ')}`);
+    }
+
+    // Warn about Codex sandbox limitations
+    warnings.push('Codex sandbox is coarse-grained; all roles use workspace-write with developer_instructions for guardrails');
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+
+  async configureAgent(workflow: WorkflowSpec, agent: WorkflowAgent): Promise<void> {
+    this.assertSafeAgentKey(workflow.id, agent.id);
+
+    const overlayPath = this.overlayPath(workflow.id, agent.id);
+
+    // Write role overlay file
+    await writeRoleOverlayFile({
+      filePath: overlayPath,
+      model: agent.model ?? DEFAULT_MODEL,
+      sandboxMode: getCodexSandboxMode(agent.role),
+      modelReasoningEffort: DEFAULT_REASONING,
+      developerInstructions: buildRoleDeveloperInstructions(agent.role, workflow.id, agent.id),
+    });
+
+    // Read existing entries for other workflows
+    const existingEntries = await this.readExistingOtherWorkflowEntries(workflow.id);
+
+    // Create new entry for this agent
+    const newEntry: AntfarmConfigEntry = {
+      profileName: this.profileName(workflow.id, agent.id),
+      overlayPath,
+      description: `antfarm ${workflow.id}/${agent.id} (${agent.role ?? 'coding'})`,
+      sandboxMode: getCodexSandboxMode(agent.role),
+      model: agent.model ?? DEFAULT_MODEL,
+      reasoningEffort: DEFAULT_REASONING,
+    };
+
+    // Update config.toml
+    await upsertAntfarmConfigBlock({
+      configPath: this.getConfigPath(),
+      entries: [...existingEntries, newEntry],
+    });
+  }
+
+  async removeAgent(workflowId: string, agentId: string): Promise<void> {
+    // Remove overlay file
+    const overlayPath = this.overlayPath(workflowId, agentId);
+    await fs.unlink(overlayPath).catch(() => {});
+
+    // Remove from config.toml
+    await removeWorkflowEntriesFromConfigBlock({
+      configPath: this.getConfigPath(),
+      workflowId,
+    });
+  }
+
+  async spawnAgent(workflow: WorkflowSpec, agent: WorkflowAgent, prompt: string): Promise<SpawnResult> {
+    // Direct spawn using codex exec
+    // Import dynamically to avoid circular dependency
+    const { spawnCodexProcess } = await import('./codex-spawn.js');
+
+    const profileName = getCodexProfileName(workflow.id, agent.id);
+
+    const result = await spawnCodexProcess({
+      workspace: process.cwd(),
+      profile: profileName,
+      prompt,
+    });
+
+    return {
+      success: result.success,
+      output: result.stdout,
+      error: result.stderr,
+      exitCode: result.exitCode ?? 0
+    };
+  }
+
   private getCodexHome(): string {
     return process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
   }

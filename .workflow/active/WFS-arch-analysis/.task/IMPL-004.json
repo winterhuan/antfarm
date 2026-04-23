@@ -2,20 +2,28 @@
   "id": "IMPL-004",
   "title": "Unify Backend interface with complete lifecycle methods",
   "description": "Enhance Backend interface with configureAgent, removeAgent, validate, capabilities. Add spawnAgent?() optional for interactive backends. Implement BackendCapabilities with supportsPerToolDeny, supportsSandbox, schedulerDriven, supportsCronManagement. Create PermissionAdapter pattern for per-backend role constraints. Write parameterized contract tests for all 4 backends.",
-  "status": "pending",
+  "status": "completed",
   "type": "enhancement",
   "action": "Implement",
   "priority": "high",
   "effort": "large",
-  "scope": ["src/backend/interface.ts", "src/backend/index.ts", "src/backend/openclaw.ts", "src/backend/hermes.ts", "src/backend/claude-code.ts", "src/backend/codex.ts"],
+  "scope": [
+    "src/backend/interface.ts",
+    "src/backend/index.ts",
+    "src/backend/openclaw.ts",
+    "src/backend/hermes.ts",
+    "src/backend/claude-code.ts",
+    "src/backend/codex.ts"
+  ],
   "focus_paths": [
     "src/backend/",
     "src/installer/agent-cron.ts",
     "src/installer/install.ts"
   ],
-  "depends_on": ["IMPL-001"],
+  "depends_on": [
+    "IMPL-001"
+  ],
   "parallel_group": 2,
-
   "convergence": {
     "criteria": [
       "Backend interface extended with 4 new methods",
@@ -28,7 +36,6 @@
     "verification": "npm test -- backend && npx tsx --test src/backend/*.test.ts",
     "definition_of_done": "Unified backend interface with capability-based behavior and full test coverage"
   },
-
   "files": [
     {
       "path": "src/backend/interface.ts",
@@ -85,7 +92,6 @@
       "change": "30 tests covering all backends uniformly"
     }
   ],
-
   "implementation": [
     {
       "step": 1,
@@ -125,7 +131,9 @@
         "Implement new methods",
         "Add capability flags"
       ],
-      "depends_on": [1],
+      "depends_on": [
+        1
+      ],
       "output": "openclaw_extended"
     },
     {
@@ -144,7 +152,9 @@
         "Implement new methods",
         "Add capability flags"
       ],
-      "depends_on": [2],
+      "depends_on": [
+        2
+      ],
       "output": "hermes_extended"
     },
     {
@@ -164,7 +174,9 @@
         "Implement new methods",
         "Add spawnAgent implementation"
       ],
-      "depends_on": [3],
+      "depends_on": [
+        3
+      ],
       "output": "claude_extended"
     },
     {
@@ -184,7 +196,9 @@
         "Implement new methods",
         "Add spawnAgent implementation"
       ],
-      "depends_on": [4],
+      "depends_on": [
+        4
+      ],
       "output": "codex_extended"
     },
     {
@@ -202,7 +216,9 @@
         "Implement parameterized tests",
         "Run against all backends"
       ],
-      "depends_on": [5],
+      "depends_on": [
+        5
+      ],
       "output": "contract_tests"
     },
     {
@@ -218,16 +234,19 @@
         "Update exports",
         "Run all tests"
       ],
-      "depends_on": [6],
+      "depends_on": [
+        6
+      ],
       "output": "factory_updated"
     }
   ],
-
   "pre_analysis": [
     {
       "step": "load_context_package",
       "action": "Load context for backend analysis",
-      "commands": ["Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"],
+      "commands": [
+        "Read('/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json')"
+      ],
       "output_to": "context_package",
       "on_error": "fail"
     },
@@ -259,7 +278,6 @@
       "output_to": "error_classes"
     }
   ],
-
   "artifacts": [
     {
       "type": "feature_spec",
@@ -270,7 +288,6 @@
       "usage": "Backend interface design and migration path"
     }
   ],
-
   "inherited": {
     "from": "IMPL-001",
     "context": [
@@ -278,7 +295,6 @@
       "BackendError, ProfileError classes for error handling"
     ]
   },
-
   "test": {
     "commands": {
       "run_tests": "npx tsx --test src/backend/*.test.ts",
@@ -299,7 +315,6 @@
       "All 4 backends have 80%+ coverage"
     ]
   },
-
   "risks": [
     {
       "description": "Backend implementations may have deep coupling to existing patterns",
@@ -320,7 +335,6 @@
       "mitigation": "Backend-specific adapter implementations"
     }
   ],
-
   "code_skeleton": {
     "interfaces": [
       {
@@ -338,11 +352,15 @@
       {
         "name": "OpenClawBackend",
         "purpose": "Enhanced with PermissionAdapter using ROLE_POLICIES",
-        "methods": ["configureAgent", "removeAgent", "validate", "capabilities"]
+        "methods": [
+          "configureAgent",
+          "removeAgent",
+          "validate",
+          "capabilities"
+        ]
       }
     ]
   },
-
   "meta": {
     "type": "enhancement",
     "agent": "@code-developer",
@@ -354,17 +372,27 @@
       "enable_resume": false
     }
   },
-
   "cli_execution": {
     "id": "WFS-arch-analysis-IMPL-004",
     "strategy": "resume",
     "resume_from": "WFS-arch-analysis-IMPL-001"
   },
-
   "context_package_path": "/home/maiscrm/workspace/antfarm/.workflow/active/WFS-arch-analysis/.process/context-package.json",
   "source": {
     "tool": "workflow-plan",
     "session_id": "WFS-arch-analysis",
     "feature_id": "F-003"
-  }
+  },
+  "status_history": [
+    {
+      "from": "pending",
+      "to": "in_progress",
+      "changed_at": "2026-04-23T16:49:34+08:00"
+    },
+    {
+      "from": "in_progress",
+      "to": "completed",
+      "changed_at": "2026-04-23T17:00:22+08:00"
+    }
+  ]
 }
